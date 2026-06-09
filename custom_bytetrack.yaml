@@ -1,0 +1,38 @@
+# Ultralytics ByteTrack Yapılandırması — Mekik Testi İçin Optimize Edilmiş
+# Referans: https://docs.ultralytics.com/modes/track/
+#
+# Varsayılan değerlerden farklar:
+#   - track_high_thresh: 0.25 → 0.15 (uzaktaki düşük güvenli tespitler de birinci aşamaya)
+#   - track_low_thresh:  0.10 → 0.05 (çok düşük güvenli tespitler kurtarılır)
+#   - match_thresh:      0.80 → 0.85 (yanlış eşleşmeleri azalt)
+#   - track_buffer:      30   → 150  (kayıp ID'yi ~5 saniye hafızada tut)
+#   - new_track_thresh:  0.60 → 0.50 (gereksiz yeni ID atamasını zorlaştır)
+
+tracker_type: bytetrack
+
+# Birinci aşama eşleştirme eşiği
+# Uzak koşucularda confidence düşük olduğu için bu eşik de düşük tutulmalı
+track_high_thresh: 0.15
+
+# İkinci aşama kurtarma eşiği (ByteTrack'in en güçlü özelliği)
+# Çok düşük güvenli tespitler bile mevcut izlerle eşleştirilir
+track_low_thresh: 0.05
+
+# Yeni iz oluşturma eşiği — YÜKSEK TUTULDU
+# Düşük güvenli tespitlerin yeni ID almasını engeller.
+# Sadece güvenli tespitler yeni koşucu olarak kaydedilir.
+# Bu, uzaktaki kaybolan koşucuların yanlışlıkla yeni ID almasını önler.
+new_track_thresh: 0.50
+
+# IoU eşleştirme eşiği
+# Yüksek değer = daha katı eşleştirme → daha az ID karışması
+match_thresh: 0.85
+
+# Kayıp iz tamponu — KRİTİK PARAMETRE
+# Bir koşucu görünmez olduğunda bu kadar kare boyunca ID hafızada tutulur.
+# 150 kare ≈ 5 saniye @ 30fps → koşucu 20m'de kaybolsa bile ID korunur.
+track_buffer: 150
+
+# Kamera hareketi telafisi
+fuse_score: true
+

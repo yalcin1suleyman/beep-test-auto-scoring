@@ -1,0 +1,82 @@
+"""
+INSTRUÇÃO DE USO — Sistema de Detecção Dinâmica de Cones
+
+O sistema agora detecta automaticamente os cones em cada frame
+e cria uma linha de detecção dinâmica entre suas bases.
+
+COMO USAR:
+==========
+
+1. ATIVAR A DETECÇÃO (em config.py):
+   
+   ENABLE_CONE_DETECTION = True
+   
+   Isso ativa o módulo cone_detector automaticamente no dual_main.py
+
+2. PERSONALIZAR CORES DOS CONES:
+   
+   Em config.py, ajuste os limites HSV:
+   
+   CONE_HSV_LOWER = (0, 80, 80)        # Laranja escuro
+   CONE_HSV_UPPER = (15, 255, 255)     # Laranja claro
+   
+   Para detectar outras cores:
+   - Vermelho: (170, 80, 80) a (180, 255, 255)
+   - Amarelo: (15, 50, 50) a (35, 255, 255)
+   - Verde: (40, 40, 40) a (80, 255, 255)
+
+3. AJUSTAR TAMANHO DO CONE:
+   
+   CONE_MIN_AREA_PX = 200              # Mínimo: não detecta muito pequeno
+   CONE_MAX_AREA_PX = 50000            # Máximo: bloqueia falsos positivos
+
+4. DEBUG — VER OS CONES DETECTADOS:
+   
+   CONE_DEBUG_DRAW = True
+   
+   Isso desenha:
+   - Círculos azuis nos centros dos cones
+   - Círculos vermelhos nas bases (onde tocam o chão)
+   - Linhas conectando centro à base
+
+5. CÓDIGO DE INTEGRAÇÃO (em dual_main.py):
+   
+   ```python
+   from config import ENABLE_CONE_DETECTION
+   from cone_line_adapter import ConeLineAdapter
+   
+   # No loop principal:
+   if ENABLE_CONE_DETECTION:
+       adapter = ConeLineAdapter(w, h)
+       line = adapter.detect_and_create_line(frame)
+       
+       if line is not None:
+           # Usar line ao invés da linha manual
+           start_line_profile = line
+   ```
+
+CARACTERÍSTICAS:
+================
+
+✓ Detecta cones automaticamente em cada frame
+✓ Encontra a base (onde tocam o chão) de cada cone
+✓ Cria linha entre o cone mais à esquerda e mais à direita
+✓ Suaviza temporal a linha contra movimentos de câmera
+✓ Compatível com o sistema de perspectiva existente (PerspectiveLine)
+✓ Trabalha com câmeras em movimento
+
+TROUBLESHOOTING:
+================
+
+Problema: Não detecta nenhum cone
+→ Aumentar BEEP_FREQ_MIN_HZ ou reduzir CONE_MIN_AREA_PX
+
+Problema: Detecta muitos falsos positivos
+→ Aumentar CONE_MIN_CIRCULARITY ou reduzir CONE_MAX_AREA_PX
+
+Problema: Linha fica muito suave/lenta
+→ Aumentar CONE_LINE_SMOOTHING_ALPHA (máximo 1.0 = sem suavização)
+
+Problema: Linha fica tremendo
+→ Aumentar CONE_LINE_SMOOTHING_ALPHA para suavizar mais
+"""

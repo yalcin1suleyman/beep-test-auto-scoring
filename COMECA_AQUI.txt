@@ -1,0 +1,109 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                     COMEÇA AQUI — GUIA RÁPIDO                                ║
+║               Sistema de Linha Dinâmica Ancorada nos Cones                   ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+
+🚀 INICIAR EM 30 SEGUNDOS
+════════════════════════════════════════════════════════════════════════════════
+
+1️⃣  JÁ ESTÁ ATIVADO!
+    em config.py: ENABLE_CONE_DETECTION = True
+    
+2️⃣  EXECUTAR NORMALMENTE
+    python dual_main.py --video seu_video.mp4
+    
+3️⃣  PRONTO!
+    Cones detectados automaticamente
+
+
+❓ MEU VÍDEO TEM CORES DIFERENTES?
+════════════════════════════════════════════════════════════════════════════════
+
+Edite em config.py:
+
+Para AMARELO:
+  CONE_HSV_LOWER = (15, 50, 50)
+  CONE_HSV_UPPER = (35, 255, 255)
+
+Para VERMELHO:
+  CONE_HSV_LOWER = (170, 80, 80)
+  CONE_HSV_UPPER = (180, 255, 255)
+
+Para OUTRO:
+  1. Teste: python exemplo_cone_detection.py --video seu_video.mp4
+  2. Veja se tem círculos (azuis=centros, vermelhos=bases)
+  3. Ajuste CONE_HSV_LOWER/UPPER conforme cor real
+
+
+🔍 VER CONES SENDO DETECTADOS
+════════════════════════════════════════════════════════════════════════════════
+
+em config.py:
+  CONE_DEBUG_DRAW = True
+
+Depois execute:
+  python dual_main.py --video seu_video.mp4
+
+Você verá:
+  🟦 Círculos azuis = centros
+  🔴 Círculos vermelhos = BASES (onde a linha é criada)
+  🟢 Linha verde = linha dinâmica
+
+
+❌ ALGO NÃO FUNCIONA?
+════════════════════════════════════════════════════════════════════════════════
+
+Problema: Nenhum cone detectado
+  → Ajuste CONE_HSV_LOWER/UPPER (cores)
+  → Reduza CONE_MIN_AREA_PX (detectar menores)
+  → Ative CONE_DEBUG_DRAW=True para ver o que detecta
+
+Problema: Muitos falsos positivos
+  → Aumente CONE_MIN_CIRCULARITY = 0.6
+  → Reduza CONE_MAX_AREA_PX = 30000
+
+Problema: Linha tremendo
+  → Aumente CONE_LINE_SMOOTHING_ALPHA = 0.85
+
+Problema: Linha lenta em câmera que se move
+  → Reduza CONE_LINE_SMOOTHING_ALPHA = 0.5
+
+
+📚 DOCUMENTAÇÃO COMPLETA
+════════════════════════════════════════════════════════════════════════════════
+
+ROTEIRO_FINAL.txt          ← Leia isto para entender tudo
+CONE_DETECTION_README.md   ← Guia completo com todos os detalhes
+IMPLEMENTATION_SUMMARY.txt ← Resumo técnico
+
+
+⚙️ COMO FUNCIONA
+════════════════════════════════════════════════════════════════════════════════
+
+Cada frame:
+  1. Detecta cones por cor (HSV)
+  2. Encontra a BASE de cada cone (ponto mais baixo)
+  3. Cria linha entre cone esquerdo e direito
+  4. Suaviza para evitar tremidas
+  5. Usa como referência para detecção de cruzamento
+
+Resultado: Linha que se move com os cones, mesmo se câmera se move!
+
+
+🎯 PRÓXIMOS PASSOS
+════════════════════════════════════════════════════════════════════════════════
+
+IMEDIATAMENTE:
+  python dual_main.py --video seu_video.mp4
+
+SE NÃO DETECTAR CONES:
+  1. python exemplo_cone_detection.py --video seu_video.mp4
+  2. Veja cores detectadas
+  3. Ajuste CONE_HSV_LOWER/UPPER
+
+SE TUDO OK:
+  Pronto! Línha dinâmica funcionando
+
+
+════════════════════════════════════════════════════════════════════════════════
