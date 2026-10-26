@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+data/logs/
+data/outputs/
+.test_tmp/
+
+# Proje icine kopyalanan buyuk kayitlar (masaustu MEKIK VIDEO klasorunden)
+data/inputs/mekik_video/

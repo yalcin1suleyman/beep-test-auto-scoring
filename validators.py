@@ -109,7 +109,7 @@ def validate_yolo_model(model_path: str | Path) -> Path:
     """
     model_path = Path(model_path)
     
-    if not model_path.exists():
+    if not model_path.is_file():
         log.error(f"YOLO model bulunamadı: {model_path}")
         raise ValidationError(
             f"YOLO model bulunamadı: {model_path}\n"
@@ -141,7 +141,7 @@ def validate_video_file(video_path: str | Path) -> Path:
     video_path = Path(video_path)
     valid_exts = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv'}
     
-    if not video_path.exists():
+    if not video_path.is_file():
         log.error(f"Video bulunamadı: {video_path}")
         raise ValidationError(f"Video dosyası bulunamadı: {video_path}")
     
@@ -151,6 +151,14 @@ def validate_video_file(video_path: str | Path) -> Path:
             f"Desteklenen: {valid_exts}"
         )
     
+    import cv2
+    cap = cv2.VideoCapture(str(video_path))
+    try:
+        ret, frame = cap.read()
+        if not cap.isOpened() or not ret or frame is None:
+            raise ValidationError(f"Video okunamadi veya bozuk: {video_path}")
+    finally:
+        cap.release()
     log.info(f"✓ Video dosyası doğrulandı: {video_path}")
     return video_path
 

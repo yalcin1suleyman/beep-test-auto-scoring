@@ -70,6 +70,7 @@ class ShuttleEvaluator:
         self._runners: dict[int, RunnerStatus] = {}
         # Son bilinen Y
         self._last_y: dict[int, float] = {}
+        self._stable_side: dict[int, str] = {}
         # Beklenen mekik indeksi
         self._expected_shuttle: dict[int, int] = {}
 
@@ -83,6 +84,10 @@ class ShuttleEvaluator:
             self._runners[track_id] = RunnerStatus(track_id=track_id)
             self._last_y[track_id] = ankle_y
             self._expected_shuttle[track_id] = 0
+            if ankle_y > self.detection_line_y + self.hysteresis_px:
+                self._stable_side[track_id] = "below"
+            elif ankle_y < self.detection_line_y - self.hysteresis_px:
+                self._stable_side[track_id] = "above"
             return
 
         # Elenmiş → atla
@@ -93,7 +98,18 @@ class ShuttleEvaluator:
         self._last_y[track_id] = ankle_y
 
         # Çizgi geçiş tespiti (tek çizgi, her iki yön)
-        crossing = self._detect_crossing(prev_y, ankle_y)
+        side = self._stable_side.get(track_id)
+        crossing = None
+        if side == "below" and ankle_y <= self.detection_line_y:
+            crossing = "to_far"
+            self._stable_side.pop(track_id, None)
+        elif side == "above" and ankle_y >= self.detection_line_y:
+            crossing = "to_near"
+            self._stable_side.pop(track_id, None)
+        if ankle_y > self.detection_line_y + self.hysteresis_px:
+            self._stable_side[track_id] = "below"
+        elif ankle_y < self.detection_line_y - self.hysteresis_px:
+            self._stable_side[track_id] = "above"
         if crossing is None:
             return
 

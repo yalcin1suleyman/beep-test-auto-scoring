@@ -28,6 +28,7 @@ MİMARİ:
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+import math
 
 import pandas as pd
 
@@ -37,6 +38,7 @@ from config import (
     MIN_SHUTTLE_INTERVAL_SEC,
     MASS_ELIMINATION_GUARD,
     CROSSING_HYSTERESIS_PX,
+    LINE_TOUCH_TOLERANCE_PX,
     RunnerState,
 )
 from timer import ShuttleTimer
@@ -105,6 +107,7 @@ class DualLineEvaluator:
         min_shuttle_interval_sec: float = MIN_SHUTTLE_INTERVAL_SEC,
         mass_elimination_guard: bool = MASS_ELIMINATION_GUARD,
         hysteresis_px: int = CROSSING_HYSTERESIS_PX,
+        touch_tolerance_px: float = LINE_TOUCH_TOLERANCE_PX,
         start_target_side: str = "below",
         far_target_side: str = "above",
     ):
@@ -127,12 +130,21 @@ class DualLineEvaluator:
         self.min_shuttle_interval_sec = min_shuttle_interval_sec
         self.mass_elimination_guard = mass_elimination_guard
         self.hysteresis_px = hysteresis_px
+        self.touch_tolerance_px = float(touch_tolerance_px)
         self.start_target_side = start_target_side
         self.far_target_side = far_target_side
+        if tolerance_sec < 0 or max_consecutive_late < 1 or min_shuttle_interval_sec < 0:
+            raise ValueError("Gecersiz tolerans, eleme esigi veya mekik araligi.")
+        if start_target_side not in {"above", "below"} or far_target_side not in {"above", "below"}:
+            raise ValueError("Hedef tarafi above veya below olmalidir.")
+        if any(not math.isfinite(t) or t <= 0 for t in beep_times) or any(
+            a >= b for a, b in zip(beep_times, beep_times[1:])
+        ):
+            raise ValueError("Bip zamanlari pozitif, sonlu ve kesin artan olmalidir.")
 
         # Bip zamanları: ses tespiti yoksa matematiksel zamanlayıcı
         if beep_times:
-            self._beep_times = beep_times
+            self._beep_times = list(beep_times)
             self._using_audio = True
             print(f"[DualEval] Ses tabanlı bip zamanları: {len(beep_times)} bip")
         elif fallback_timer is not None:
@@ -193,6 +205,10 @@ class DualLineEvaluator:
         target_line="far"    → Kamera 2, 20m varışlarını (to_far) arar.
         target_line="start"  → Kamera 1, başlangıç dönüşlerini (to_near) arar.
         """
+        if target_line not in {"start", "far"}:
+            raise ValueError("target_line start veya far olmalidir.")
+        if current_time < 0:
+            return
         if track_id not in self._runners:
             self._init_runner(track_id, ankle_y, current_time=current_time)
 
@@ -214,12 +230,12 @@ class DualLineEvaluator:
                 self._on_crossing(runner, direction, current_time)
             return
 
-        if passed_line:
+        if passed_line and prev_side != "target":
             self._last_line_side[key] = side
             self._on_crossing(runner, direction, current_time)
             return
 
-        if side != prev_side:
+        if side == "before":
             self._last_line_side[key] = side
 
     def check_beep_deadlines(
@@ -296,7 +312,8 @@ class DualLineEvaluator:
                     "status": status,
                     "shuttle_no": idx + 1,
                 })
-                break
+                if runner.state == RunnerState.ELIMINATED:
+                    break
 
     def _mark_late(
         self,
@@ -317,7 +334,7 @@ class DualLineEvaluator:
             runner.elimination_reason = elimination_reason
             return eliminated_status
 
-        runner.state = RunnerState.ACTIVE
+        runner.state = RunnerState.WARNING
         return warning_status
 
     def _skip_mass_elimination_deadline(self, current_time: float, expected_direction: str):
@@ -389,7 +406,7 @@ class DualLineEvaluator:
         return self._using_audio
 
     def get_beep_times(self) -> list[float]:
-        return self._beep_times
+        return list(self._beep_times)
 
     def get_runner_display_state(self, track_id: int, current_time: float) -> str | None:
         runner = self._runners.get(track_id)
@@ -424,7 +441,9 @@ class DualLineEvaluator:
                 ),
                 "Eleme Nedeni": st.elimination_reason or "-",
             })
-        return pd.DataFrame(rows)
+        return pd.DataFrame(rows, columns=["Kosucu ID", "Durum", "Toplam Gecis", "20m Gecis",
+            "Baslangic Gecis", "Zamaninda", "Gec", "Ardisik Gec", "Son Tamamlanan Yon",
+            "Son Gorulen Kamera", "Eleme Zamani (s)", "Eleme Nedeni"])
 
     def get_detailed_log_dataframe(self) -> pd.DataFrame:
         rows = []
@@ -438,7 +457,7 @@ class DualLineEvaluator:
                     "Sonuc": entry["status"],
                     "Mekik No": entry["shuttle_no"],
                 })
-        return pd.DataFrame(rows)
+        return pd.DataFrame(rows, columns=["Kosucu ID", "Zaman (s)", "Kamera", "Yon", "Sonuc", "Mekik No"])
 
     def export_results(self, output_dir: str | Path):
         output_dir = Path(output_dir)
@@ -540,6 +559,8 @@ class DualLineEvaluator:
         h = self.hysteresis_px
         line_y = self._line_y_at(target_line, x)
         target_side = self.far_target_side if target_line == "far" else self.start_target_side
+        # Cizgiye temas yeterlidir: cizgiyi kosucunun geldigi tarafa kaydir.
+        line_y += -self.touch_tolerance_px if target_side == "below" else self.touch_tolerance_px
 
         if target_side == "below":
             if y > line_y:
@@ -590,6 +611,8 @@ class DualLineEvaluator:
     def _on_crossing(self, runner: DualRunnerStatus, direction: str, current_time: float):
         """Tespit edilen bir geçişi değerlendir."""
         idx = runner.expected_shuttle_idx
+        if idx >= len(self._beep_times):
+            return
         expected_dir = "to_far" if idx % 2 == 0 else "to_near"
         advance_expected = False
 
@@ -603,11 +626,8 @@ class DualLineEvaluator:
         # Kamera etiketini belirle
         cam = "20m" if direction == "to_far" else "baslangic"
         prev_cam = self._last_completed_camera.get(runner.track_id)
-        if prev_cam == cam:
-            return
         if (
             prev_cam is not None
-            and runner.last_crossing_time > 0
             and current_time - runner.last_crossing_time < self.min_shuttle_interval_sec
         ):
             return

@@ -60,10 +60,12 @@ class BeepDetector:
             Video başından itibaren bip zamanları (saniye).
             Ses çıkarılamazsa boş liste döner.
         """
-        tmp_wav = Path(tempfile.gettempdir()) / "mekik_audio_tmp.wav"
+        with tempfile.NamedTemporaryFile(suffix=".wav", prefix="mekik_audio_", delete=False) as tmp:
+            tmp_wav = Path(tmp.name)
         print(f"\n[BeepDetector] Ses çıkarılıyor: {video_path.name}")
 
         if not self._extract_audio(video_path, tmp_wav):
+            tmp_wav.unlink(missing_ok=True)
             print("[BeepDetector] UYARI: Ses çıkarılamadı.")
             print("  → ffmpeg kurulu olmalı. Kurmak için:")
             print("    Windows: https://ffmpeg.org/download.html (PATH'e ekleyin)")
@@ -137,6 +139,8 @@ class BeepDetector:
         Yüksek enerjili pikler bip anı olarak işaretlenir.
         """
         sr, data = wavfile.read(str(wav_path))
+        if data.size == 0:
+            return []
 
         # Stereo → mono
         if data.ndim > 1:
@@ -155,7 +159,7 @@ class BeepDetector:
         frame_times: list[float] = []
         band_energies: list[float] = []
 
-        for start in range(0, len(data) - win_size, hop_size):
+        for start in range(0, len(data) - win_size + 1, hop_size):
             segment = data[start : start + win_size] * hann_win
             fft_mag = np.abs(np.fft.rfft(segment))
             freqs = np.fft.rfftfreq(win_size, d=1.0 / sr)
@@ -168,6 +172,8 @@ class BeepDetector:
 
         times = np.array(frame_times)
         energies = np.array(band_energies)
+        if energies.size == 0 or not np.any(energies > 0):
+            return []
 
         percentile_threshold = float(np.percentile(energies, self.threshold_percentile))
         max_threshold = float(energies.max() * self.strong_threshold_ratio) if energies.size else 0.0

@@ -22,6 +22,7 @@ from config import (
     RIGHT_ANKLE_IDX,
     ROI_X_MIN,
     ROI_X_MAX,
+    PROJECT_ROOT,
     RunnerData,
 )
 from logger import get_logger
@@ -57,6 +58,10 @@ class PoseTracker:
             Exception: Model yükleme başarısız olursa
         """
         log.info(f"PoseTracker başlatılıyor... (model: {model_path})")
+        if not Path(model_path).is_absolute() and not Path(model_path).exists():
+            model_path = PROJECT_ROOT / model_path
+        if not Path(tracker_config).is_absolute() and not Path(tracker_config).exists():
+            tracker_config = PROJECT_ROOT / tracker_config
         
         # Model dosyasını doğrula
         try:
@@ -186,7 +191,7 @@ class PoseTracker:
         
         except Exception as e:
             log.error(f"Frame işlemesi başarısız: {e}", exc_info=True)
-            return []
+            raise RuntimeError("Poz takibi basarisiz; sonuclar guvenilir degil.") from e
 
     @staticmethod
     def _compute_ankle_midpoint(

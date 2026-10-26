@@ -1,0 +1,189 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Mekik - Masaustu Kayitlari (menu)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run_sessions.py",
+      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      },
+      "args": [
+        "--hold-open"
+      ],
+      "justMyCode": true
+    },
+    {
+      "name": "Mekik - Video 1 (goruntulu)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run_sessions.py",
+      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      },
+      "args": [
+        "--session",
+        "1",
+        "--hold-open"
+      ],
+      "justMyCode": true
+    },
+    {
+      "name": "Mekik - Video 2 (goruntulu)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run_sessions.py",
+      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      },
+      "args": [
+        "--session",
+        "2",
+        "--hold-open"
+      ],
+      "justMyCode": true
+    },
+    {
+      "name": "Mekik - Video 3 (goruntulu)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run_sessions.py",
+      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      },
+      "args": [
+        "--session",
+        "3",
+        "--hold-open"
+      ],
+      "justMyCode": true
+    },
+    {
+      "name": "Mekik - Video 4 (goruntulu)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run_sessions.py",
+      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      },
+      "args": [
+        "--session",
+        "4",
+        "--hold-open"
+      ],
+      "justMyCode": true
+    },
+    {
+      "name": "Mekik - Video 5 (goruntulu)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run_sessions.py",
+      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      },
+      "args": [
+        "--session",
+        "5",
+        "--hold-open"
+      ],
+      "justMyCode": true
+    },
+    {
+      "name": "Mekik - Video 6 (goruntulu)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run_sessions.py",
+      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      },
+      "args": [
+        "--session",
+        "6",
+        "--hold-open"
+      ],
+      "justMyCode": true
+    },
+    {
+      "name": "Mekik - Video 7 (goruntulu)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run_sessions.py",
+      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      },
+      "args": [
+        "--session",
+        "7",
+        "--hold-open"
+      ],
+      "justMyCode": true
+    },
+    {
+      "name": "Mekik - Tum Kayitlar (ekransiz)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run_sessions.py",
+      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      },
+      "args": [
+        "--all",
+        "--no-display"
+      ],
+      "justMyCode": true
+    },
+    {
+      "name": "Mekik - Cift Kamera Goruntulu",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/dual_main.py",
+      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "cwd": "${workspaceFolder}",
+      "console": "internalConsole",
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      },
+      "args": [
+        "--no-audio",
+        "--hold-open",
+        "--start-line",
+        "75,270;718,286",
+        "--far-line",
+        "170,450;905,443",
+        "--runner-count",
+        "5",
+        "--output-dir",
+        "data/outputs/vscode_preview"
+      ],
+      "justMyCode": true
+    }
+  ]
+}

@@ -1,138 +1,148 @@
-# Otomatik Mekik Testi Değerlendirme Sistemi (v3)
+# Otomatik Mekik Testi (20 m Beep Test) Değerlendirme Sistemi
 
-20m mekik koşusu testini (Beep Test) bilgisayarla görme ile otomatik puanlayan sistem.
+İki telefonla çekilen mekik koşusu videolarını izler. Koşucuların her bipte ilgili
+çizgiye ulaşıp ulaşmadığını yapay zekâ ile (YOLOv8-Pose) kontrol eder; geç kalanları
+uyarır, üst üste iki kez kaçıranları eler ve rapor üretir.
 
-## 🆕 v3.1 — Error Handling & Logging
-
-- ✅ **Kapsamlı error handling** — hatalı girdilerde sistem çökmez
-- ✅ **Logging sistemi** — tüm olaylar `data/logs/` klasörüne kaydedilir
-- ✅ **Model doğrulama** — YOLO modeli yüklenmeden kontrol edilir
-- ✅ **File validation** — video ve yapılandırma dosyaları kontrol edilir
-- ✅ **Unit testler** — `pytest` ile otomatik testler
-- ✅ **Exception handling** — frame işlemeleri başarısız olsa bile devam eder
-
-## v4 — İki Gerçek Kamera + Dinamik Çizgi Takibi
-
-- **0m ve 20m videoları**: Kök dizindeki `0metre.mp4` ve `20metre.mp4` varsayılan olarak iki ayrı kamera kabul edilir.
-- **Dinamik çizgi takibi**: Kalibre edilen çizgiler her karede yeniden izlenir; çizgi görünmezse hafif kamera kayması kareler arası hareketten telafi edilir.
-- **Bip/deadline değerlendirmesi**: Koşucu her bipte ilgili uç çizgiye temas/geçiş yapmak zorundadır.
-- **Eleme mantığı**: Ardışık `MAX_CONSECUTIVE_LATE` gecikme/kaçırma sonrası koşucu elenir.
-- **Ses veya matematiksel zamanlayıcı**: Video sesinden bip bulunursa kullanılır; bulunamazsa resmi hız tablosuna göre sanal bipler üretilir.
-
-## Neden Tek Çizgi?
-
-Kamera arkadan çekim yaptığında koşucular 20m ucunda çok küçülüyor ve
-hiçbir model onları tespit edemiyor. Tek çizgi yaklaşımı, koşucuların
-görülebildiği alanda çalışarak bu sorunu ortadan kaldırır.
-
-## 📦 Kurulum
-
-```bash
-pip install -r requirements.txt
+```
+   [0 m telefonu]  →  koşucular  ⇄  20 m  ←  [20 m telefonu]
+   baslangic_0m.mp4                          bitis_20m.mp4
 ```
 
-### Test Çalıştırma
+Her telefon kendi çizgisinin arkasında durur ve koşucular ona doğru koşarken o çizgiyi
+denetler.
 
-```bash
-# Tüm testleri çalıştır
-pytest tests/
+---
 
-# Verbose mod
-pytest tests/ -v
+## 1. Hızlı başlangıç
 
-# Belirli test dosyasını çalıştır
-pytest tests/test_validators.py
+**VS Code:** Sol menüde *Run and Debug* (▶) → açılır listeden bir ayar seçin → ▶ / F5.
+
+| Ayar | Ne yapar |
+|---|---|
+| `Mekik - Video N (goruntulu)` | N. kaydı pencerede, videonun kendi hızında izletir |
+| `Mekik - Masaustu Kayitlari (menu)` | Terminalde kayıt numarası sorar |
+| `Mekik - Tum Kayitlar (ekransiz)` | 7 kaydın hepsini her kareyi işleyerek analiz eder (kesin sonuç) |
+
+**Terminal:**
+
+```powershell
+python run_sessions.py --list               # kayıtları ve ayarlarını listele
+python run_sessions.py -s 2                 # Video 2'yi izle (kendi hızında)
+python run_sessions.py -s 2 --no-display    # Video 2, ekransız, her kare (kesin sonuç)
+python run_sessions.py --all --no-display   # hepsi + toplu özet
+python run_sessions.py -s 2 --recalibrate   # çizgileri fareyle yeniden seç
 ```
 
-## 🚀 Kullanım
+> **Görüntülü mod** videoyu kendi hızında oynatır. İşlemci her kareye yetişemediği için
+> saniyede birkaç kare analiz edilir; izlemek ve kontrol etmek içindir.
+> **Ekransız mod** her kareyi işler; kesin puanlar için bunu kullanın.
 
-### Ana Program (Tek Çizgi)
+Pencerede **Q / ESC** durdurur. Video bitince pencere açık kalır; bir tuşa basınca kapanır.
 
-```bash
-python main.py                                  # YouTube'dan indir + işle
-python main.py --no-display                     # Ekransız çalıştır
-python main.py --video path/to/video.mp4        # Yerel video
-python main.py --video path/to/video.mp4 --start-time 5.0  # Başlangıç zamanını belirt
-```
+## 2. Sonuçlar nereye yazılır?
 
-### Çift Kamera Sistemi
+`data/outputs/sonuclar/video_N/`
 
-```bash
-python dual_main.py                             # 0metre.mp4 + 20metre.mp4
-python dual_main.py --no-display                # Ekransız çalıştır
-python dual_main.py --no-audio                  # Matematiksel bip zamanlayıcı
-python dual_main.py --start-time 9.5            # Koşu başlangıç saniyesi
-python dual_main.py --start-video a.mp4 --far-video b.mp4
-python dual_main.py --use-config-lines          # Hazır config çizgilerini kullan
-```
+| Dosya | İçerik |
+|---|---|
+| `analiz_raporu.html` | Tarayıcıda açılan özet rapor |
+| `sonuc_ozet.csv` / `sonuc_rapor.xlsx` | Koşucu başına durum, geçiş, geç, eleme |
+| `sonuc_detay.csv` | Her çizgi geçişi ve bip kararı |
+| `sonuc_paneli.jpg` | Son durum ekranı |
+| `*_dual_camera.mp4` | İki kamera yan yana, işaretlenmiş analiz videosu |
+| `run_metadata.json` | Kullanılan ayarlar, kamera kayması istatistikleri |
 
-## 📂 Klasör Yapısı
+Hepsi birlikte çalıştırılırsa: `data/outputs/sonuclar/tum_kayitlar_ozet.csv`
+
+## 3. Klasör yapısı
 
 ```
 mekikTestProje/
+├── run_sessions.py          ← ANA PROGRAM: kayıtları seçip çalıştırır
+├── mekik_sessions.json      ← 7 kaydın ayarları (çizgiler, koşucu sayısı, bip, senkron)
+├── config.py                ← Genel ayarlar (toleranslar, eleme kuralı, model yolu…)
+│
+├── dual_main.py             ← Analiz döngüsü: iki videoyu senkron okur, çizer, raporlar
+├── dual_camera_analyser.py  ← Puanlama kuralları (zamanında / geç / elendi)
+├── tracker.py               ← YOLOv8-Pose ile kişi ve ayak tespiti
+├── camera_motion.py         ← Elde tutulan telefonun kaymasını telafi eder
+├── run_start.py             ← Ses yoksa çıkış anını koşucuların kalkışından bulur
+├── audio_detector.py        ← Bip sesi tespiti
+├── timer.py                 ← Resmi mekik temposu (seviye / hız tablosu)
+├── line_geometry.py         ← Perspektifli çizgi hesabı
+├── video_dashboard.py       ← Ekran paneli ve HTML rapor
+├── line_calibrator.py       ← Fareyle çizgi seçme penceresi
+├── validators.py, logger.py ← Dosya doğrulama ve günlük kaydı
+├── main.py                  ← (Eski) tek kameralı sürüm
+├── line_tracker.py, cone_*.py, video_splitter.py ← (Eski) yardımcılar; dual_main içinden isteğe bağlı
+│
+├── models/                  ← yolov8n-pose.pt, yolov8s-pose.pt, custom_bytetrack.yaml
 ├── data/
-│   ├── inputs/          ← Video dosyaları buraya koyun
-│   ├── outputs/         ← Analiz videoları ve raporlar
-│   └── logs/            ← İşlem logları (otomatik oluşturulur)
-├── tests/               ← Unit testler
-├── logger.py            ← Logging sistemi (YENİ)
-├── validators.py        ← File ve sistem doğrulama (YENİ)
-├── config.py            ← Merkezi yapılandırma
-├── main.py              ← Ana program (güncellenmiş)
-├── dual_main.py         ← Çift kamera programı
-├── tracker.py           ← YOLOv8-Pose takibi (güncellenmiş)
-├── analyser.py          ← Mekik değerlendirme
-└── timer.py             ← Zamanlayıcı
+│   ├── inputs/
+│   │   ├── mekik_video/video_1 … video_7/   ← baslangic_0m.mp4 + bitis_20m.mp4 (+ kaynak.txt)
+│   │   ├── referans/reference_beep_audio.mp4 ← salonda çalan bip kaydı (Léger 20 m)
+│   │   └── ornek_kayit/                     ← eski örnekler (0metre.mp4, 20metre.mp4…)
+│   ├── outputs/
+│   │   ├── sonuclar/video_N/                ← güncel analiz çıktıları
+│   │   └── _eski/                           ← önceki denemelerin çıktıları
+│   └── logs/                                ← çalışma günlükleri
+├── tests/                   ← otomatik testler (python -m pytest -q)
+├── scripts/                 ← denetim araçları (eski rapor betikleri: scripts/eski/)
+└── docs/                    ← kalibrasyon rehberi, doğrulama raporu, geçmiş notlar
 ```
 
-## 📋 Loglar Nerede?
+`data/inputs/mekik_video/` masaüstündeki **MEKİK VİDEO** klasörünün kopyasıdır. Her
+klasördeki `kaynak.txt` hangi WhatsApp dosyasından geldiğini yazar. Bu klasör büyük
+olduğu için `.gitignore` ile git dışında tutulur.
 
-Her çalışma `data/logs/mekik_test_YYYYMMDD_HHMMSS.log` dosyasında kaydedilir.
+## 4. Nasıl çalışır?
 
-```bash
-# En yeni loga bak (Windows PowerShell)
-Get-Content "data\logs\mekik_test_*.log" -Tail 50
-
-# Hata satırlarını göster
-Select-String -Path "data\logs\*.log" -Pattern "ERROR|EXCEPTION"
+```
+mekik_sessions.json ──► run_sessions.py ──► dual_main.process_dual_camera()
+                                              │
+   1. Bip çizelgesi:  referans bip kaydı → bipler arası resmi aralıklar
+                      (8,47 s × 7, 8,0 s × 8, 7,58 s × 8 …), çıkış bipinden başlar
+   2. Her kare:       0 m videosu + 20 m videosu (cam2_offset ile eşlenir)
+                      ├─ camera_motion: telefon kaydıysa çizgiyi yeni yerine taşı
+                      ├─ tracker: kişileri ve ayak noktalarını bul
+                      ├─ kulvar ataması: soldan sağa koşucu 1, 2, 3…
+                      └─ analyser: ayak çizgiye bastı mı? Bip geldi mi?
+   3. Bip anında:     hedef çizgiye ulaşmayan → GEÇ; üst üste 2 kez → ELENDİ
+   4. Sonunda:        CSV, Excel, HTML rapor, analiz videosu
 ```
 
-## 🔧 Sorun Giderme
+Kurallar (`config.py`):
 
-### ❌ "YOLO model bulunamadı" hatası
+- Ayak çizgiye **basarsa** yeterli (`LINE_TOUCH_TOLERANCE_PX = 10`).
+- Bipten sonraki **0,5 s** içinde ulaşan zamanında sayılır (`LATE_TOLERANCE_SEC`). Bu pay, iki telefon arasındaki senkron ve ölçüm belirsizliği içindir.
+- Üst üste **2** gecikme ya da kaçırma eleme sebebidir (`MAX_CONSECUTIVE_LATE`).
 
-```bash
-python -c "from ultralytics import YOLO; YOLO('yolov8n-pose.pt')"
+## 5. Kayıtların ayarları nasıl bulundu?
+
+| Ayar | Yöntem |
+|---|---|
+| Hangi video 0 m / 20 m | Karelere bakılarak (koşucular kameraya yaklaşıp hangi çizgide dönüyor) |
+| Çıkış bipi | Kaydın sesi referans bip kaydıyla eşleştirildi (672 Hz bip) |
+| İki kamera arası fark | İki kaydın sesi karşılaştırıldı; Video 1'de dönüşlerdeki ayakkabı gıcırtıları kullanıldı |
+| Çizgiler | Zemindeki çizgiler kareler üzerinde ölçüldü, koşucuların dönüş noktalarıyla doğrulandı |
+| Koşucu sayısı | Başlangıç karesinden sayıldı |
+
+Yeni bir kayıt eklemek için `mekik_sessions.json` dosyasına yeni bir bölüm ekleyin.
+Çizgileri `--recalibrate` ile fareyle seçebilirsiniz. Ses yoksa `"start_beep_time": "kalkis"`
+yazın; çıkış anı koşucuların kalkışından bulunur.
+
+## 6. Bilinen sınırlar
+
+- **Video 7** standart bip testi değildir: koşucular ~31 s'de bir gidip dönüyor, arada bekliyor. Puanlaması anlamlı değildir.
+- **Video 1**'de salon bipi neredeyse duyulmuyor; çıkış zamanı ±1 s belirsizdir. Bu yüzden 3. mekikte herkese "geç" uyarısı çıkabilir.
+- Sonuçlar otomatik değerlendirmedir; hakem kayıtlarıyla karşılaştırılmamıştır.
+
+## 7. Kurulum ve test
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
 ```
 
-### ❌ "Video bulunamadı" hatası
-
-- `data/inputs/` klasörüne video koyun, VEYA
-- `--video /path/to/video.mp4` argümanını kullanın
-
-### ❌ "yt-dlp kurulu değil" hatası
-
-```bash
-pip install yt-dlp
-```
-
-### ❌ Frame işlemesi başarısız
-
-- Log dosyasını kontrol edin: `data/logs/`
-- Video dosyasının bozuk olmadığını kontrol edin
-- Modeli yeniden indirin: `python -c "from ultralytics import YOLO; YOLO('yolov8n-pose.pt')"`
-
-## 📊 Çıktılar
-
-- `*_analyzed.mp4` — Video overlay ile sonuçlar
-- `results_TIMESTAMP.csv` — Koşucu sonuçları tablosu
-- `mekik_test_*.log` — İşlem logları
-
-### Kalibrasyon
-
-`dual_main.py` varsayılan olarak her çalışmada iki kameranın ilk karesini açar ve kullanıcıdan çizgileri kendisinin seçmesini ister:
-
-- Kamera 1: başlangıç / 0m çizgisi
-- Kamera 2: 20m çizgisi
-
-Her çizgi için soldan sağa iki nokta seçin. Hazır çizgi koordinatlarını kullanmak isterseniz `config.py` içindeki `DUAL_START_LINE_POINTS` ve `DUAL_FAR_LINE_POINTS` değerlerini doldurup programı `--use-config-lines` ile çalıştırın.
+Eski sürüm notları: `docs/GECMIS_NOTLAR.md` · Kalibrasyon: `docs/CALIBRATION_GUIDE.md`

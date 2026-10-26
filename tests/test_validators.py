@@ -75,6 +75,11 @@ class TestValidateVideoFile:
             tmp_path = Path(tmp.name)
         
         try:
+            import cv2
+            import numpy as np
+            writer = cv2.VideoWriter(str(tmp_path), cv2.VideoWriter_fourcc(*"mp4v"), 10, (32, 32))
+            writer.write(np.zeros((32, 32, 3), dtype=np.uint8))
+            writer.release()
             result = validate_video_file(tmp_path)
             assert result == tmp_path
         finally:

@@ -18,11 +18,13 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent
 DATA_INPUTS = PROJECT_ROOT / "data" / "inputs"
 DATA_OUTPUTS = PROJECT_ROOT / "data" / "outputs"
+SAMPLE_INPUTS = DATA_INPUTS / "ornek_kayit"        # Eski tek/cift kamera ornek videolari
+REFERENCE_INPUTS = DATA_INPUTS / "referans"         # Salonda calan bip kaydi
 
 # Kullanici tarafindan yuklenen varsayilan cift kamera videolari.
 # 0m kamerasi baslangic cizgisini, 20m kamerasi karsi uc cizgisini gorur.
-DEFAULT_START_CAMERA_VIDEO = PROJECT_ROOT / "0metre.mp4"
-DEFAULT_FAR_CAMERA_VIDEO = PROJECT_ROOT / "20metre.mp4"
+DEFAULT_START_CAMERA_VIDEO = SAMPLE_INPUTS / "0metre.mp4"
+DEFAULT_FAR_CAMERA_VIDEO = SAMPLE_INPUTS / "20metre.mp4"
 
 # ==============================================================================
 # YouTube Video İndirme
@@ -48,10 +50,10 @@ DEFAULT_START_BEEP_TIME_SEC: float | None = 10.0
 # büyütmek yerine ÇİZGİLERİ tespitın güvenilir olduğu bölgeye taşıyın.
 # (Kalibrasyon sırasında çizgiyi ekranın en üstüne DEĞİL,
 #  koşucuların hâlâ net göründüğü yere koyun.)
-YOLO_MODEL = "yolov8n-pose.pt"
+YOLO_MODEL = "models/yolov8n-pose.pt"
 
 # Özel ByteTrack yapılandırması — uzak mesafe ID kurtarma optimize
-TRACKER_CONFIG = "custom_bytetrack.yaml"
+TRACKER_CONFIG = "models/custom_bytetrack.yaml"
 
 # Güven eşiği: 0.15 = uzak tespitlerde denge noktası
 # Çok düşük (0.05) → yanlış pozitifler, çok yüksek (0.5) → uzak kayıplar
@@ -82,6 +84,9 @@ LINE_THICKNESS = 2                      # Çizgi kalınlığı (piksel)
 
 # Çizgi geçiş tespiti — titreşim önleme marjı (piksel)
 CROSSING_HYSTERESIS_PX = 15             # 15px = daha geniş marj (ID kayması önlenir)
+# Kosucu cizgiye basarsa (gecmese de) mekik tamamlanmis sayilir. Ayak kutusunun
+# alt kenari boyali cizginin bu kadar piksel onunde kalsa da temas kabul edilir.
+LINE_TOUCH_TOLERANCE_PX = 10
 
 # Kalibre edilen yatay cizgi her karede yeniden takip edilir. Kamera hafif
 # kayarsa deger bu sinirlar icinde yumusak bicimde guncellenir.
@@ -90,6 +95,11 @@ LINE_TRACK_SEARCH_MARGIN_PX = 70
 LINE_TRACK_MIN_CONFIDENCE = 0.18
 LINE_TRACK_SMOOTHING_ALPHA = 0.25
 LINE_TRACK_MAX_STEP_PX = 8
+
+# Elde tutulan telefon kameralari zamanla kayar/egilir. Acikken kalibrasyon
+# karesine gore homografi hesaplanir ve cizgiler guncel kareye tasinir.
+ENABLE_CAMERA_MOTION_COMPENSATION = True
+MOTION_COMP_UPDATE_EVERY = 3            # Kac karede bir kamera hareketi hesaplanir
 
 # ==============================================================================
 # Çift Kamera Sistemi — İki Çizgi Ayarları (dual_main.py için)
@@ -186,7 +196,7 @@ CAM2_ID_OFFSET: int = 1000
 SHUTTLE_DISTANCE_M = 20.0               # Mekik mesafesi (metre)
 INITIAL_SPEED_KMH = 7.0                 # Seviye 1 başlangıç hızı (km/h)
 SPEED_INCREMENT_KMH = 0.5               # Her seviyede hız artışı (km/h)
-SPEED_INCREMENT_EVERY_SHUTTLE = True    # True: her bip/mekikte hız artar
+SPEED_INCREMENT_EVERY_SHUTTLE = False   # Hiz SHUTTLES_PER_LEVEL tablosuna gore seviye sonunda artar
 
 # Her seviyedeki mekik sayıları (resmi beep test tablosu)
 # Seviye 1: 7 mekik, Seviye 2: 8, Seviye 3: 8, ... Seviye 21: 16
@@ -217,7 +227,7 @@ SHUTTLES_PER_LEVEL = [
 # ==============================================================================
 # Değerlendirme Mantığı
 # ==============================================================================
-LATE_TOLERANCE_SEC = 0.0                # Bip geldiyse ve çizgi geçilmediyse geç kalmıştır
+LATE_TOLERANCE_SEC = 0.5                # Bipten sonra bu sure icinde cizgiye ulasan zamaninda sayilir (senkron/olcum belirsizligi payi)
 MAX_CONSECUTIVE_LATE = 2                # Ardışık bu kadar gecikme/kaçırma sonrası eleme yapılır
 MIN_SHUTTLE_INTERVAL_SEC = 2.0          # Aynı koşucu iki uç çizgiyi bundan hızlı tamamlayamaz
 MASS_ELIMINATION_GUARD = False          # Resmi timer kullanılırken herkes kaçırırsa herkes elenir

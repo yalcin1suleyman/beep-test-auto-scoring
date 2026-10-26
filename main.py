@@ -20,7 +20,7 @@ import cv2
 import numpy as np
 
 from config import (
-    DATA_INPUTS,
+    SAMPLE_INPUTS,
     DATA_OUTPUTS,
     DEFAULT_VIDEO_URL,
     VIDEO_START_TIME_SEC,
@@ -249,7 +249,7 @@ def find_video(video_arg: str | None, auto_download: bool = True) -> Path:
     # data/inputs içinde ara
     try:
         input_dir = validate_directory_exists(
-            DATA_INPUTS,
+            SAMPLE_INPUTS,
             description="Giriş klasörü",
             create_if_missing=True
         )
@@ -263,7 +263,7 @@ def find_video(video_arg: str | None, auto_download: bool = True) -> Path:
     # Otomatik indir
     if auto_download:
         log.info("Yerel video bulunamadı, YouTube'dan indiriliyor...")
-        return download_video(DEFAULT_VIDEO_URL, DATA_INPUTS)
+        return download_video(DEFAULT_VIDEO_URL, SAMPLE_INPUTS)
 
     log.error("Video bulunamadı")
     raise FileNotFoundError(
@@ -325,6 +325,8 @@ def process_video(video_path: Path, display: bool = True,
             det_line_y = DETECTION_LINE_Y
             log.info(f"  Config'den: tespit çizgisi Y={det_line_y}")
         else:
+            if not display:
+                raise ValueError("Ekransiz mod icin config.py DETECTION_LINE_Y ayarlanmalidir.")
             try:
                 det_line_y = calibrate_line(first_frame)
             except KeyboardInterrupt:
@@ -448,9 +450,7 @@ def process_video(video_path: Path, display: bool = True,
             
             except Exception as e:
                 log.error(f"Kare {frame_idx} işlemesi başarısız: {e}")
-                # Devam et, bu frame'i atla
-                frame_idx += 1
-                continue
+                raise RuntimeError(f"Kare {frame_idx} islenemedi; analiz durduruldu.") from e
 
         # Temizlik
         cap.release()
@@ -478,6 +478,7 @@ def process_video(video_path: Path, display: bool = True,
             log.info(f"✓ Sonuçlar dışa aktarıldı: {output_dir}")
         except Exception as e:
             log.error(f"Sonuçlar dışa aktarılırken hata: {e}")
+            raise
         
         log.info(f"{'='*60}\n")
     
@@ -520,7 +521,7 @@ def main():
         # Video URL verilmişse indir
         if args.url:
             log.info(f"YouTube URL'si sağlandı: {args.url}")
-            video_path = download_video(args.url, DATA_INPUTS)
+            video_path = download_video(args.url, SAMPLE_INPUTS)
         else:
             video_path = find_video(args.video)
 

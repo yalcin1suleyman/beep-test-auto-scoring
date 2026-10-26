@@ -50,3 +50,13 @@ class TestShuttleTimer:
         shuttle1 = timer.get_current_shuttle(t=0.0)
         # get_current_shuttle mevcut shuttle'ı döndürür
         assert shuttle1["speed_kmh"] == 7.0  # Mekik 1
+
+    def test_speed_changes_at_level_boundary(self):
+        from config import SHUTTLES_PER_LEVEL
+        timer = ShuttleTimer()
+        deadlines = timer.get_deadline_times()
+        for i in range(SHUTTLES_PER_LEVEL[0]):
+            current = timer.get_current_shuttle(0 if i == 0 else deadlines[i-1]+.01)
+            assert current['level'] == 1
+            assert current['speed_kmh'] == 7.0
+        assert timer.get_current_shuttle(deadlines[SHUTTLES_PER_LEVEL[0]-1]+.01)['speed_kmh'] == 7.5

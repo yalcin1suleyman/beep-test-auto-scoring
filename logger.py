@@ -73,7 +73,7 @@ def get_logger(module_name: str) -> logging.Logger:
         log = get_logger(__name__)
         log.info("Başlandı")
     """
-    return logging.getLogger(module_name)
+    return logger.getChild(module_name)
 
 
 def log_exception(exc: Exception, context: str = ""):

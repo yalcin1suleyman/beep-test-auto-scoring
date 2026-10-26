@@ -1,5 +1,5 @@
 """
-dual_main.py — Çift Kamera + Ses Tabanlı Mekik Testi Değerlendirme Sistemi
+dual_main.py - Çift Kamera + Ses Tabanlı Mekik Testi Değerlendirme Sistemi
 
 MİMARİ:
   Aynı video dosyasından iki bağımsız kamera akışı simüle edilir:
@@ -31,15 +31,20 @@ Kullanım:
 import argparse
 import sys
 import time
+import json
+import math
+from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path
 
 import cv2
 import numpy as np
+from scipy.optimize import linear_sum_assignment
 
 from config import (
-    DATA_INPUTS,
     DATA_OUTPUTS,
+    SAMPLE_INPUTS,
+    REFERENCE_INPUTS,
     DEFAULT_START_CAMERA_VIDEO,
     DEFAULT_FAR_CAMERA_VIDEO,
     DEFAULT_BEEP_AUDIO_URL,
@@ -62,6 +67,8 @@ from config import (
     LINE_TRACK_MIN_CONFIDENCE,
     LINE_TRACK_SMOOTHING_ALPHA,
     LINE_TRACK_MAX_STEP_PX,
+    ENABLE_CAMERA_MOTION_COMPENSATION,
+    MOTION_COMP_UPDATE_EVERY,
     EXPECTED_RUNNER_COUNT,
     FONT_SCALE,
     FONT_THICKNESS,
@@ -89,7 +96,10 @@ from video_splitter import create_dual_camera_videos
 from dual_camera_analyser import DualLineEvaluator
 from line_tracker import HorizontalLineTracker, LineTrackerConfig
 from line_geometry import PerspectiveLine
+from camera_motion import CameraMotionCompensator, MotionCompensatorConfig
 from line_calibrator import DualLineCalibrator
+from validators import validate_video_file
+from video_dashboard import render_dashboard, export_visual_report
 
 # Sistema de detecção dinâmica de cones
 try:
@@ -102,13 +112,13 @@ except ImportError:
 # ==============================================================================
 # Renk Sabitleri
 # ==============================================================================
-COLOR_START_LINE = (0, 220, 0)      # Yeşil — başlangıç (0m) çizgisi
-COLOR_FAR_LINE   = (0, 140, 255)    # Turuncu — 20m çizgisi
-COLOR_BIP_FLASH  = (0, 255, 255)    # Sarı — bip animasyonu
+COLOR_START_LINE = (0, 220, 0)      # Yeşil - başlangıç (0m) çizgisi
+COLOR_FAR_LINE   = (0, 140, 255)    # Turuncu - 20m çizgisi
+COLOR_BIP_FLASH  = (0, 255, 255)    # Sarı - bip animasyonu
 
 
 # ==============================================================================
-# İki Nokta Çizgi Kalibrasyonu — Perspektif Çizgisi (2 tıklama)
+# İki Nokta Çizgi Kalibrasyonu - Perspektif Çizgisi (2 tıklama)
 # ==============================================================================
 
 
@@ -166,7 +176,7 @@ def _calibrate_perspective_line(
                 if abs(px - int(px_stored * preview_scale)) < 15 and abs(py - int(py_stored * preview_scale)) < 15:
                     hovering = i
                     break
-            
+
             if hovering >= 0 and state["click_count"] >= 2:
                 state["hovering_point"] = hovering
                 state["dragging"] = True
@@ -279,10 +289,10 @@ def calibrate_cameras(
 ) -> tuple[list[tuple[int, int]], list[tuple[int, int]]]:
     """
     İKİ KAMERA ÖN AYARI: Her kameradan 2 nokta seçerek perspektif çizgisi tanımla.
-    
+
     Kamera 1 (başlangıç): Soldan sağa gidiş
     Kamera 2 (20m): Soldan sağa gidiş
-    
+
     Döndürür: (start_line_points, far_line_points)
     Burada her biri [(x1, y1), (x2, y2)] formatında iki noktadır.
     """
@@ -291,13 +301,13 @@ def calibrate_cameras(
         return DUAL_START_LINE_POINTS, DUAL_FAR_LINE_POINTS
 
     if use_config_lines:
-        print("  Config çizgileri eksik; interaktif kalibrasyona geçiliyor.")
+        raise ValueError("Config cizgileri eksik. --start-line ve --far-line ile koordinat belirtin.")
 
     h1, w1 = frame1.shape[:2]
     h2, w2 = frame2.shape[:2]
 
     print("\n" + "=" * 70)
-    print("KALIBRASYON 1/2 — KAMERA 1: Başlangıç (0m) çizgisi (2 TIKLAMA)")
+    print("KALIBRASYON 1/2 - KAMERA 1: Başlangıç (0m) çizgisi (2 TIKLAMA)")
     print("  Konilerin alt kısmından geçen çizgiyi belirleyin.")
     print("  1. tıklama: Solda, 2. tıklama: Sağda")
     print("=" * 70)
@@ -313,7 +323,7 @@ def calibrate_cameras(
         line_color=COLOR_START_LINE,
         suggested_points=suggested_start,
         header_lines=[
-            "KAMERA 1 — BASLANGIC CIZGISI (0m)",
+            "KAMERA 1 - BASLANGIC CIZGISI (0m)",
             "Atletler kameraya YAKIN / BUYUK gorunur",
             "Conilerin alt kismini tanimlayan 2 noktayi secin (soldan saga)",
         ],
@@ -321,7 +331,7 @@ def calibrate_cameras(
     print(f"  → Başlangıç çizgisi: {start_points}")
 
     print("\n" + "=" * 70)
-    print("KALIBRASYON 2/2 — KAMERA 2: 20m çizgisi (2 TIKLAMA)")
+    print("KALIBRASYON 2/2 - KAMERA 2: 20m çizgisi (2 TIKLAMA)")
     print("  Konilerin alt kısmından geçen çizgiyi belirleyin.")
     print("  1. tıklama: Solda, 2. tıklama: Sağda")
     print("=" * 70)
@@ -337,7 +347,7 @@ def calibrate_cameras(
         line_color=COLOR_FAR_LINE,
         suggested_points=suggested_far,
         header_lines=[
-            "KAMERA 2 — 20m CIZGISI",
+            "KAMERA 2 - 20m CIZGISI",
             "Atletler UZAKTA / KUCUK gorunur",
             "Conilerin alt kismini tanimlayan 2 noktayi secin (soldan saga)",
         ],
@@ -434,21 +444,24 @@ class LaneAssigner:
         if self._centers is None:
             if len(candidates) < self.lane_count:
                 return []
-            ordered = sorted(candidates, key=lambda item: item[0])[:self.lane_count]
+            strongest = sorted(candidates, key=lambda item: item[1].confidence, reverse=True)[:self.lane_count]
+            ordered = sorted(strongest, key=lambda item: item[0])
             self._centers = [norm for norm, _runner in ordered]
             return [
                 replace(runner, track_id=lane_id)
                 for lane_id, (_norm, runner) in enumerate(ordered, start=1)
             ]
 
-        available = set(range(self.lane_count))
-        assigned = []
-        for norm, runner in sorted(candidates, key=lambda item: item[1].confidence, reverse=True):
-            if not available:
-                break
-            idx = min(available, key=lambda candidate: abs(self._centers[candidate] - norm))
-            available.remove(idx)
-            assigned.append(replace(runner, track_id=idx + 1))
+        # Match all detections jointly. Greedy confidence order can let the first
+        # detection steal its neighbour's lane and swap two runner identities.
+        strongest = sorted(candidates, key=lambda item: item[1].confidence, reverse=True)[:self.lane_count]
+        ordered = sorted(strongest, key=lambda item: item[0])
+        if not ordered:
+            return []
+        costs = np.abs(np.array([n for n, _ in ordered])[:, None] - np.array(self._centers)[None, :])
+        _, indices = linear_sum_assignment(costs)
+        assigned = [replace(runner, track_id=int(idx)+1)
+                    for (_, runner), idx in zip(ordered, sorted(indices))]
 
         return sorted(assigned, key=lambda runner: runner.track_id)
 
@@ -491,11 +504,11 @@ def draw_runners_on_frame(
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         cv2.circle(frame, (int(r.ankle_mid_x), int(r.ankle_mid_y)),
                    ANKLE_CIRCLE_RADIUS, (0, 180, 255), -1)
-        label = f"ID:{r.track_id} [{display_state}] G:{st.total_crossings}"
-        sz, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, FONT_THICKNESS)
-        cv2.rectangle(frame, (x1, y1 - sz[1] - 8), (x1 + sz[0] + 4, y1), COLOR_TEXT_BG, -1)
-        cv2.putText(frame, label, (x1 + 2, y1 - 4),
-                    cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, color, FONT_THICKNESS)
+        label = f"#{r.track_id}"
+        label_y = max(22, y1)
+        cv2.rectangle(frame, (max(0,x1), label_y-22), (max(0,x1)+40, label_y), (28,21,15), -1)
+        cv2.putText(frame, label, (max(0,x1)+4, label_y-5),
+                    cv2.FONT_HERSHEY_SIMPLEX, .5, color, 1, cv2.LINE_AA)
 
 
 def draw_camera_overlay(
@@ -515,59 +528,9 @@ def draw_camera_overlay(
 
     # Tespit çizgisi
     line_profile.draw(frame, line_color, LINE_THICKNESS)
-    mid_x = w // 2
-    mid_y = int(round(line_profile.y_at(mid_x)))
-    cv2.putText(frame, f"{cam_name}  perspektif cizgi",
-                (10, max(20, mid_y - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, line_color, 2)
-
-    # Bip flash
     if bip_active:
-        cv2.rectangle(frame, (0, 0), (w, h), COLOR_BIP_FLASH, 8)
-        label_size, _ = cv2.getTextSize(bip_label, cv2.FONT_HERSHEY_SIMPLEX, 1.8, 5)
-        cv2.putText(frame, bip_label, (max(10, w // 2 - label_size[0] // 2), h // 2),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.8, COLOR_BIP_FLASH, 5)
-
-    # Kamera etiketi
-    cv2.rectangle(frame, (0, 0), (len(cam_name) * 14 + 20, 28), (0, 0, 0), -1)
-    cv2.putText(frame, cam_name, (8, 20),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.65, line_color, 2)
-
-    # HUD — sol üst
-    if current_time < 0:
-        bip_idx = 0
-        next_bip_t = -current_time
-    else:
-        bip_idx = sum(1 for bt in beep_times if current_time > bt)
-        next_bip_t = (beep_times[bip_idx] - current_time
-                      if bip_idx < len(beep_times) else 0.0)
-    active = evaluator.get_active_count()
-    total = len(evaluator.get_all_runner_statuses())
-    if current_time < 0:
-        hud_lines = [
-            f"Cikis bekleniyor: {next_bip_t:.1f}s",
-            f"Kosucu: {active}/{total} aktif",
-            "Bip: CIKIS",
-        ]
-    else:
-        hud_lines = [
-            f"Yaris zamani: {current_time:.1f}s",
-            f"Kosucu: {active}/{total} aktif",
-            f"Bip: {bip_idx}/{len(beep_times)}",
-            f"Sonraki: {next_bip_t:.1f}s" if next_bip_t > 0 else "Bitti",
-        ]
-    if shuttle_info:
-        target = "20m" if shuttle_info["global_idx"] % 2 == 1 else "0m"
-        hud_lines.extend([
-            f"Kademe: {shuttle_info['level']}  Mekik: {shuttle_info['shuttle_in_level']}",
-            f"Hiz: {shuttle_info['speed_kmh']:.1f} km/h  Hedef: {target}",
-        ])
-    y_hud = 55
-    for line in hud_lines:
-        sz, _ = cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-        cv2.rectangle(frame, (5, y_hud - sz[1] - 3), (5 + sz[0] + 8, y_hud + 3), (0, 0, 0), -1)
-        cv2.putText(frame, line, (9, y_hud),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        y_hud += 22
+        cv2.rectangle(frame, (1, 1), (w-2, h-2), COLOR_BIP_FLASH, 4)
+    return
 
 
 def build_side_by_side(frame1: np.ndarray, frame2: np.ndarray,
@@ -591,7 +554,9 @@ def build_side_by_side(frame1: np.ndarray, frame2: np.ndarray,
             f2 = np.pad(f2, ((0, max_h - h2), (0, 0), (0, 0)))
 
     divider = np.full((f1.shape[0], 4, 3), 180, dtype=np.uint8)
-    return np.hstack([f1, divider, f2])
+    combined = np.hstack([f1, divider, f2])
+    # mp4v requires even dimensions; preserve every source pixel with padding.
+    return np.pad(combined, ((0, combined.shape[0] % 2), (0, 0), (0, 0)))
 
 
 # ==============================================================================
@@ -606,8 +571,8 @@ def find_video(video_arg: str | None) -> Path:
             return p
         print(f"[HATA] Video bulunamadı: {p}")
         sys.exit(1)
-    if DATA_INPUTS.is_dir():
-        for f in sorted(DATA_INPUTS.iterdir()):
+    if SAMPLE_INPUTS.is_dir():
+        for f in sorted(SAMPLE_INPUTS.iterdir()):
             if f.suffix.lower() in exts and "camera_" not in f.name:
                 print(f"[Video] Bulundu: {f}")
                 return f
@@ -705,6 +670,32 @@ def _audio_beeps_to_run_deadlines(
     return rel, None
 
 
+def _reference_beeps_to_run_deadlines(raw_beep_times: list[float]) -> list[float]:
+    """
+    Referans bip kaydindaki bipleri cikis bipine gore deadline listesine cevirir.
+
+    Referans kaydin ilk bipi cikis bipidir; deadline'lar ondan itibaren olculur.
+    Seviye gecis sinyali farkli tonda caldigi icin bant filtresi onu kacirabilir.
+    Iki bip arasi bosluk onceki aralik ile tam kat ise eksik bipler onceki
+    tempoyla tamamlanir; aksi halde mekik sirasi (gidis/donus yonu) kayardi.
+    """
+    beeps = sorted(float(t) for t in raw_beep_times)
+    if len(beeps) < 2:
+        return []
+    filled = [beeps[0]]
+    for t in beeps[1:]:
+        prev = filled[-1]
+        interval = prev - filled[-2] if len(filled) >= 2 else t - prev
+        gap = t - prev
+        if interval > 0:
+            missing = round(gap / interval) - 1
+            if missing >= 1 and abs(gap - (missing + 1) * interval) < 0.3 * interval:
+                filled.extend(prev + k * interval for k in range(1, missing + 1))
+        filled.append(t)
+    start = filled[0]
+    return [round(t - start, 3) for t in filled[1:]]
+
+
 def _merge_beep_times(*beep_lists: list[float], merge_window_sec: float = 0.75) -> list[float]:
     """Iki kamera sesinden gelen yakin bipleri tek zaman cizelgesinde birlestirir."""
     merged: list[float] = []
@@ -767,17 +758,42 @@ def process_dual_camera(
     real_dual_camera: bool = True,
     display: bool = True,
     start_time_sec: float = VIDEO_START_TIME_SEC,
-    cam2_offset_sec: float = CAM2_OFFSET_SEC,
+    cam2_offset_sec: float | None = None,
     use_audio: bool = True,
     max_frames: int | None = None,
     beep_times_override: list[float] | None = None,
     beep_audio_url: str | None = None,
     start_beep_time_override: float | None = None,
     use_config_lines: bool = False,
+    start_line_points: list[tuple[int, int]] | None = None,
+    far_line_points: list[tuple[int, int]] | None = None,
+    output_dir: Path | None = None,
+    runner_count: int = EXPECTED_RUNNER_COUNT,
+    hold_open: bool = False,
+    realtime_preview: bool = False,
+    motion_compensation: bool = ENABLE_CAMERA_MOTION_COMPENSATION,
 ):
+    start_video_path = validate_video_file(start_video_path)
     far_video_path = far_video_path or start_video_path
-    if real_dual_camera and cam2_offset_sec == CAM2_OFFSET_SEC:
-        cam2_offset_sec = 0.0
+    far_video_path = validate_video_file(far_video_path)
+    if cam2_offset_sec is None:
+        cam2_offset_sec = 0.0 if real_dual_camera else CAM2_OFFSET_SEC
+    if not math.isfinite(start_time_sec) or start_time_sec < 0 or not math.isfinite(cam2_offset_sec):
+        raise ValueError("Baslangic ve ofset sonlu olmali; baslangic negatif olamaz.")
+    if max_frames is not None and max_frames <= 0:
+        raise ValueError("max_frames pozitif olmalidir.")
+    if runner_count <= 0:
+        raise ValueError("Kosucu sayisi pozitif olmalidir.")
+    if start_beep_time_override is not None and (
+        not math.isfinite(start_beep_time_override) or start_beep_time_override < 0
+    ):
+        raise ValueError("Cikis bipi sonlu ve negatif olmayan bir saniye olmalidir.")
+    output_dir = Path(output_dir) if output_dir is not None else DATA_OUTPUTS
+    if not use_audio:
+        beep_audio_url = None
+    if not display and not (start_line_points and far_line_points):
+        if not (use_config_lines and DUAL_START_LINE_POINTS and DUAL_FAR_LINE_POINTS):
+            raise ValueError("Ekransiz mod icin --start-line ve --far-line veya dolu config cizgileri gerekir.")
 
     print(f"\n{'='*65}")
     print(f"  Çift Kamera Mekik Testi")
@@ -787,11 +803,12 @@ def process_dual_camera(
     print(f"  Mod        : {'iki ayrı video' if real_dual_camera else 'tek video + ofset simülasyonu'}")
     print(f"  Kamera 1   : t={start_time_sec:.1f}s (başlangıç çizgisi)")
     print(f"  Kamera 2   : t={start_time_sec + cam2_offset_sec:.1f}s "
-          f"({cam2_offset_sec:.1f}s ofset — 20m çizgisi)")
+          f"({cam2_offset_sec:.1f}s ofset - 20m çizgisi)")
     print("  Zamanlayıcı: referans bip videosu" if beep_audio_url else "  Zamanlayıcı: resmi mekik temposu")
     print(f"  Ses tespiti: {'referans bip videosu' if beep_audio_url else ('sadece çıkış bipi' if use_audio else 'KAPALI')}")
     print(f"  Çizgi seçimi: {'config dosyasından' if use_config_lines else 'kullanıcı kalibrasyonu'}")
     print(f"  Çizgi takip: {'AÇIK' if ENABLE_AUTO_LINE_TRACKING else 'KAPALI'}")
+    print(f"  Kamera kayma telafisi: {'AÇIK' if motion_compensation else 'KAPALI'}")
     run_zero_time_sec = start_time_sec
 
     # ------------------------------------------------------------------
@@ -803,479 +820,567 @@ def process_dual_camera(
     # ------------------------------------------------------------------
     # 2. İki bağımsız video akışı aç
     # ------------------------------------------------------------------
-    cap1 = cv2.VideoCapture(str(start_video_path))
-    cap2 = cv2.VideoCapture(str(far_video_path))
+    with ExitStack() as resources:
+        cap1 = cv2.VideoCapture(str(start_video_path))
+        resources.callback(cap1.release)
+        cap2 = cv2.VideoCapture(str(far_video_path))
+        resources.callback(cap2.release)
+        if display:
+            resources.callback(cv2.destroyAllWindows)
 
-    if not cap1.isOpened() or not cap2.isOpened():
-        print("[HATA] Video açılamadı.")
-        sys.exit(1)
+        if not cap1.isOpened() or not cap2.isOpened():
+            print("[HATA] Video açılamadı.")
+            raise RuntimeError("Video veya ses kaynagi okunamadi.")
 
-    fps        = cap1.get(cv2.CAP_PROP_FPS) or 30.0
-    fps2       = cap2.get(cv2.CAP_PROP_FPS) or fps
-    total_f    = int(cap1.get(cv2.CAP_PROP_FRAME_COUNT))
-    total_f2   = int(cap2.get(cv2.CAP_PROP_FRAME_COUNT))
-    w          = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
-    h          = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    w2         = int(cap2.get(cv2.CAP_PROP_FRAME_WIDTH))
-    h2         = int(cap2.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    duration   = total_f / fps
-    duration2  = total_f2 / fps2 if fps2 else 0.0
-    cam2_start = start_time_sec + cam2_offset_sec
+        fps        = cap1.get(cv2.CAP_PROP_FPS) or 30.0
+        fps2       = cap2.get(cv2.CAP_PROP_FPS) or fps
+        total_f    = int(cap1.get(cv2.CAP_PROP_FRAME_COUNT))
+        total_f2   = int(cap2.get(cv2.CAP_PROP_FRAME_COUNT))
+        w          = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h          = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        w2         = int(cap2.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h2         = int(cap2.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        duration   = total_f / fps
+        duration2  = total_f2 / fps2 if fps2 else 0.0
+        cam2_start = start_time_sec + cam2_offset_sec
+        if not (0 <= start_time_sec < duration and 0 <= cam2_start < duration2):
+            raise ValueError("Baslangic zamani video suresinin disinda.")
+        if min(w, h, w2, h2) <= 0 or not all(math.isfinite(v) and v > 0 for v in (fps, fps2)):
+            raise ValueError("Gecersiz video boyutu veya FPS.")
 
-    print(f"  Kamera 1   : {w}x{h} @ {fps:.1f} FPS, {duration:.1f}s")
-    print(f"  Kamera 2   : {w2}x{h2} @ {fps2:.1f} FPS, {duration2:.1f}s")
+        print(f"  Kamera 1   : {w}x{h} @ {fps:.1f} FPS, {duration:.1f}s")
+        print(f"  Kamera 2   : {w2}x{h2} @ {fps2:.1f} FPS, {duration2:.1f}s")
 
-    # Kamera 1: koşu başından
-    cap1.set(cv2.CAP_PROP_POS_MSEC, start_time_sec * 1000)
-    # Kamera 2: 9s sonradan (20m çizgisine ilk varış zamanı)
-    cap2.set(cv2.CAP_PROP_POS_MSEC, cam2_start * 1000)
+        # Kamera 1: koşu başından
+        cap1.set(cv2.CAP_PROP_POS_MSEC, start_time_sec * 1000)
+        # Kamera 2: 9s sonradan (20m çizgisine ilk varış zamanı)
+        cap2.set(cv2.CAP_PROP_POS_MSEC, cam2_start * 1000)
 
-    # ------------------------------------------------------------------
-    # 3. Çıkış bipi + resmi mekik zamanlayıcı
-    # ------------------------------------------------------------------
-    run_beep_times: list[float] = []
-    official_timer: ShuttleTimer | None = None
-    if beep_times_override:
-        run_beep_times = sorted(beep_times_override)
-        print(f"[Ses] Manuel bip çizelgesi kullanılıyor: {[round(t, 2) for t in run_beep_times[:10]]}")
-    elif beep_audio_url:
-        beep_video = download_youtube_video(
-            beep_audio_url,
-            DATA_INPUTS,
-            "reference_beep_audio.mp4",
-        )
-        detector = BeepDetector()
-        raw_beeps = detector.detect_beeps(beep_video)
-        run_beep_times, _unused_start = _audio_beeps_to_run_deadlines(raw_beeps, 0.0)
-        if not run_beep_times:
-            print("[HATA] Referans bip videosundan bip zamanı çıkarılamadı.")
-            sys.exit(1)
-        print(f"[Ses] Referans bip çizelgesi kullanılıyor: {[round(t, 2) for t in run_beep_times[:10]]}")
-        start_beep_time = (
-            start_beep_time_override
-            if start_beep_time_override is not None
-            else DEFAULT_START_BEEP_TIME_SEC
-        )
-        if start_beep_time is not None:
-            run_zero_time_sec = start_beep_time
-            print(
-                f"[Timer] Yarış saati {run_zero_time_sec:.3f}s çıkış bipiyle sıfırlanacak; "
-                "hedef bipleri referans videodan alınacak."
+        # ------------------------------------------------------------------
+        # 3. Çıkış bipi + resmi mekik zamanlayıcı
+        # ------------------------------------------------------------------
+        run_beep_times: list[float] = []
+        official_timer: ShuttleTimer | None = None
+        if beep_times_override:
+            run_beep_times = sorted(beep_times_override)
+            print(f"[Ses] Manuel bip çizelgesi kullanılıyor: {[round(t, 2) for t in run_beep_times[:10]]}")
+        elif beep_audio_url:
+            beep_video = download_youtube_video(
+                beep_audio_url,
+                REFERENCE_INPUTS,
+                "reference_beep_audio.mp4",
             )
-    else:
-        start_beep_time = (
-            start_beep_time_override
-            if start_beep_time_override is not None
-            else DEFAULT_START_BEEP_TIME_SEC
-        )
-        if start_beep_time is not None:
-            print(f"[Timer] Çıkış bipi sabit: {start_beep_time:.3f}s")
-        elif use_audio:
             detector = BeepDetector()
-            raw_start = detector.detect_beeps(start_video_path)
-            raw_far = []
-            if far_video_path != start_video_path:
-                raw_far = detector.detect_beeps(far_video_path)
-            all_start_candidates = sorted(
-                t for t in [*raw_start, *raw_far] if t >= start_time_sec
+            raw_beeps = detector.detect_beeps(beep_video)
+            run_beep_times = _reference_beeps_to_run_deadlines(raw_beeps)
+            if not run_beep_times:
+                print("[HATA] Referans bip videosundan bip zamanı çıkarılamadı.")
+                raise RuntimeError("Video veya ses kaynagi okunamadi.")
+            print(f"[Ses] Referans bip çizelgesi kullanılıyor: {[round(t, 2) for t in run_beep_times[:10]]}")
+            start_beep_time = (
+                start_beep_time_override
+                if start_beep_time_override is not None
+                else DEFAULT_START_BEEP_TIME_SEC
             )
-            if all_start_candidates:
-                start_beep_time = all_start_candidates[0]
-                print(f"[Ses] Çıkış bipi algılandı: {start_beep_time:.3f}s")
-                print(f"[Ses] Adaylar: {[round(t, 2) for t in all_start_candidates[:8]]}")
-            else:
-                print("[Ses] Çıkış bipi bulunamadı; video başlangıcı yarış başlangıcı kabul ediliyor.")
-
-        if start_beep_time is not None:
-            run_zero_time_sec = start_beep_time
-            print(
-                f"[Timer] Yarış saati {run_zero_time_sec:.3f}s çıkış bipiyle sıfırlanacak; "
-                f"video {start_time_sec:.3f}s'den oynayacak."
-            )
-
-        official_timer = ShuttleTimer(0.0)
-        preview_deadlines = official_timer.get_deadline_times()
-        print(f"[Timer] İlk hedef deadline: {preview_deadlines[0]:.3f}s (çıkıştan sonra)")
-        official_timer.print_schedule(max_levels=2)
-
-    fallback = official_timer
-
-    # ------------------------------------------------------------------
-    # 4. Kalibrasyon — her kameranın ilk karesinden
-    # ------------------------------------------------------------------
-    print("\n[Kalibrasyon] İlk kareler alınıyor...")
-    ret1, frame1_cal = cap1.read()
-    ret2, frame2_cal = cap2.read()
-    if not ret1 or not ret2:
-        print("[HATA] İlk kareler okunamadı.")
-        sys.exit(1)
-
-    # Kamera başlarını sıfırla
-    cap1.set(cv2.CAP_PROP_POS_MSEC, start_time_sec * 1000)
-    cap2.set(cv2.CAP_PROP_POS_MSEC, cam2_start * 1000)
-
-    start_line_points, far_line_points = calibrate_cameras(
-        frame1_cal,
-        frame2_cal,
-        use_config_lines=use_config_lines,
-    )
-    start_line_profile_base = PerspectiveLine.from_points(start_line_points)
-    far_line_profile_base = PerspectiveLine.from_points(far_line_points)
-    start_line_y = start_line_profile_base.median_y
-    far_line_y = far_line_profile_base.median_y
-    print(f"  Perspektif başlangıç çizgisi: {[(int(x), int(y)) for x, y in start_line_profile_base.points]}")
-    print(f"  Perspektif 20m çizgisi      : {[(int(x), int(y)) for x, y in far_line_profile_base.points]}")
-
-    if display:
-        preview1 = frame1_cal.copy()
-        preview2 = frame2_cal.copy()
-        start_line_profile_base.draw(preview1, COLOR_START_LINE, LINE_THICKNESS)
-        cv2.putText(preview1, "KAMERA 1 - BASLANGIC (0m)",
-                    (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_START_LINE, 2)
-        far_line_profile_base.draw(preview2, COLOR_FAR_LINE, LINE_THICKNESS)
-        cv2.putText(preview2, "KAMERA 2 - 20m",
-                    (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_FAR_LINE, 2)
-        preview_dual = build_side_by_side(preview1, preview2, target_w=min(640, w))
-        cv2.namedWindow("Mekik Testi — Cift Kamera Tek Ekran", cv2.WINDOW_NORMAL)
-        cv2.imshow("Mekik Testi — Cift Kamera Tek Ekran", preview_dual)
-        cv2.waitKey(500)
-
-    # ------------------------------------------------------------------
-    # 5. Modüller
-    # ------------------------------------------------------------------
-    print("\n[Modüller] Başlatılıyor...")
-    tracker1 = PoseTracker()
-    tracker2 = PoseTracker()
-    
-    # Adaptadores de cone (se habilitado)
-    start_cone_adapter = None
-    far_cone_adapter = None
-    if ENABLE_CONE_DETECTION and CONE_DETECTOR_AVAILABLE:
-        print(f"[Cones] Detecção dinamica habilitada")
-        start_cone_adapter = ConeLineAdapter(w, h)
-        far_cone_adapter = ConeLineAdapter(w2, h2)
-    elif ENABLE_CONE_DETECTION and not CONE_DETECTOR_AVAILABLE:
-        print("[AVISO] cone_detector nao disponivel, usando linhas fixas")
-
-    evaluator = DualLineEvaluator(
-        start_line_y=start_line_y,
-        far_line_y=far_line_y,
-        beep_times=run_beep_times,
-        start_line_profile=start_line_profile_base,
-        far_line_profile=far_line_profile_base,
-        fallback_timer=fallback,
-        start_target_side="below",
-        far_target_side="below",
-    )
-    beep_times_list = evaluator.get_beep_times()
-
-    start_lane_assigner = LaneAssigner(
-        lane_count=EXPECTED_RUNNER_COUNT,
-        frame_width=w,
-        reverse_view=False,
-        lane_x_min=start_line_profile_base.min_x,
-        lane_x_max=start_line_profile_base.max_x,
-    )
-    far_lane_assigner = LaneAssigner(
-        lane_count=EXPECTED_RUNNER_COUNT,
-        frame_width=w2,
-        reverse_view=True,
-        lane_x_min=far_line_profile_base.min_x,
-        lane_x_max=far_line_profile_base.max_x,
-    )
-
-    line_tracker_cfg = LineTrackerConfig(
-        search_margin_px=LINE_TRACK_SEARCH_MARGIN_PX,
-        min_confidence=LINE_TRACK_MIN_CONFIDENCE,
-        smoothing_alpha=LINE_TRACK_SMOOTHING_ALPHA,
-        max_step_px=LINE_TRACK_MAX_STEP_PX,
-    )
-    start_line_tracker = HorizontalLineTracker(start_line_y, line_tracker_cfg)
-    far_line_tracker = HorizontalLineTracker(far_line_y, line_tracker_cfg)
-
-    # ------------------------------------------------------------------
-    # 6. Çıktı video (yan yana, 640px per panel)
-    # ------------------------------------------------------------------
-    panel_w   = min(640, w)
-    panel_h   = int(h * panel_w / w)
-    out_w     = panel_w * 2 + 4
-    out_h     = panel_h
-    out_stem = f"{start_video_path.stem}_{far_video_path.stem}" if real_dual_camera else start_video_path.stem
-    out_path  = DATA_OUTPUTS / f"{out_stem}_dual_camera.mp4"
-    DATA_OUTPUTS.mkdir(parents=True, exist_ok=True)
-    writer = cv2.VideoWriter(
-        str(out_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (out_w, out_h)
-    )
-
-    # ------------------------------------------------------------------
-    # 7. Pencereler
-    # ------------------------------------------------------------------
-    WIN_DUAL = "Mekik Testi — Cift Kamera Tek Ekran"
-
-    if display:
-        cv2.namedWindow(WIN_DUAL, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(WIN_DUAL, out_w, out_h)
-
-    # ------------------------------------------------------------------
-    # 8. İşleme döngüsü
-    # ------------------------------------------------------------------
-    print(f"\n[İşleme] Başlıyor — q veya ESC ile dur")
-    if real_dual_camera:
-        print("  ID eşleştirme: 0m soldan-sağa, 20m sağdan-sola ortak kulvar ID")
-    else:
-        print(f"  ID eşleştirme: {'tek video simülasyonu (ortak ID)' if CAM2_SHARE_TRACK_IDS else 'kamera ofsetli ID'}")
-    frame_idx    = 0
-    proc_fps     = 0.0
-    t_wall_start = time.time()
-    remaining    = total_f - int(start_time_sec * fps)
-
-    bip_flash1 = 0   # Kamera 1 bip animasyon sayacı
-    bip_flash2 = 0   # Kamera 2 bip animasyon sayacı
-    BIP_DUR    = max(1, int(fps * 0.4))
-    last_bip_i1 = 0
-    last_bip_i2 = 0
-    start_flash1 = 0
-    start_flash2 = 0
-    start_bip_fired1 = False
-    start_bip_fired2 = False
-
-    while True:
-        ret1, frame1 = cap1.read()
-        if not ret1:
-            break
-
-        ret2, frame2 = cap2.read()
-        # Kamera 2 bitti ama kamera 1 devam ediyorsa siyah kare
-        if not ret2:
-            frame2 = np.zeros_like(frame1)
-
-        t0 = time.time()
-
-        # Zaman hesabı. CAP_PROP_POS_MSEC farklı FPS'li iki gerçek kamerada
-        # frame index varsayımından daha doğru sonuç verir.
-        cam1_video_time = cap1.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
-        cam2_video_time = cap2.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
-        cam1_time = cam1_video_time - run_zero_time_sec
-        cam2_time = cam2_video_time - run_zero_time_sec
-
-        current_start_line_profile = start_line_profile_base
-        current_far_line_profile = far_line_profile_base
-        
-        # Detecção dinâmica de cones (substitui linha fixa se habilitada)
-        if ENABLE_CONE_DETECTION and start_cone_adapter is not None:
-            try:
-                cone_start_line = start_cone_adapter.detect_and_create_line(frame1)
-                if cone_start_line is not None:
-                    current_start_line_profile = cone_start_line
-            except Exception as e:
-                print(f"[Dual] Erro na detecção de cones da câmera 1: {e}")
-            
-            if ret2 and far_cone_adapter is not None:
-                try:
-                    cone_far_line = far_cone_adapter.detect_and_create_line(frame2)
-                    if cone_far_line is not None:
-                        current_far_line_profile = cone_far_line
-                except Exception as e:
-                    print(f"[Dual] Erro na detecção de cones da câmera 2: {e}")
-            
-            # Atualiza evaluador com as linhas detectadas (quer sejam de cones ou base)
-            evaluator.start_line_y = current_start_line_profile.median_y
-            evaluator.far_line_y = current_far_line_profile.median_y
-            evaluator.start_line_profile = current_start_line_profile
-            evaluator.far_line_profile = current_far_line_profile
-        
-        # Rastreamento automático de linha (se habilitado e cones desabilitados)
-        elif ENABLE_AUTO_LINE_TRACKING:
-            current_start_line_y = start_line_tracker.update(frame1)
-            current_start_line_profile = start_line_profile_base.shifted(
-                current_start_line_y - start_line_profile_base.median_y
-            )
-            if ret2:
-                current_far_line_y = far_line_tracker.update(frame2)
-                current_far_line_profile = far_line_profile_base.shifted(
-                    current_far_line_y - far_line_profile_base.median_y
+            if start_beep_time is not None:
+                run_zero_time_sec = start_beep_time
+                print(
+                    f"[Timer] Yarış saati {run_zero_time_sec:.3f}s çıkış bipiyle sıfırlanacak; "
+                    "hedef bipleri referans videodan alınacak."
                 )
-            evaluator.start_line_y = current_start_line_profile.median_y
-            evaluator.far_line_y = current_far_line_profile.median_y
-            evaluator.start_line_profile = current_start_line_profile
-            evaluator.far_line_profile = current_far_line_profile
+        else:
+            start_beep_time = (
+                start_beep_time_override
+                if start_beep_time_override is not None
+                else DEFAULT_START_BEEP_TIME_SEC
+            )
+            if start_beep_time is not None:
+                print(f"[Timer] Çıkış bipi sabit: {start_beep_time:.3f}s")
+            elif use_audio:
+                detector = BeepDetector()
+                raw_start = detector.detect_beeps(start_video_path)
+                raw_far = []
+                if far_video_path != start_video_path:
+                    raw_far = detector.detect_beeps(far_video_path)
+                all_start_candidates = sorted(
+                    t for t in [*raw_start, *raw_far] if t >= start_time_sec
+                )
+                if all_start_candidates:
+                    start_beep_time = all_start_candidates[0]
+                    print(f"[Ses] Çıkış bipi algılandı: {start_beep_time:.3f}s")
+                    print(f"[Ses] Adaylar: {[round(t, 2) for t in all_start_candidates[:8]]}")
+                else:
+                    print("[Ses] Çıkış bipi bulunamadı; video başlangıcı yarış başlangıcı kabul ediliyor.")
 
-        if not start_bip_fired1 and cam1_time >= 0:
-            start_flash1 = BIP_DUR
-            start_bip_fired1 = True
-        if not start_bip_fired2 and cam2_time >= 0:
-            start_flash2 = BIP_DUR
-            start_bip_fired2 = True
-
-        # Poz tespiti — iki tracker bağımsız
-        runners1 = tracker1.process_frame(frame1)
-        runners2 = tracker2.process_frame(frame2) if ret2 else []
-        if real_dual_camera:
-            runners1 = start_lane_assigner.assign(runners1)
-            runners2 = far_lane_assigner.assign(runners2)
-
-        # Değerlendirici güncelleme. Çıkış bipinden önceki hareketler sayılmaz.
-        if cam1_time >= 0:
-            for r in runners1:
-                foot_y = float(r.bbox[3])
-                evaluator.update_camera_line(
-                    r.track_id,
-                    r.ankle_mid_x,
-                    foot_y,
-                    cam1_time,
-                    target_line="start",
+            if start_beep_time is not None:
+                run_zero_time_sec = start_beep_time
+                print(
+                    f"[Timer] Yarış saati {run_zero_time_sec:.3f}s çıkış bipiyle sıfırlanacak; "
+                    f"video {start_time_sec:.3f}s'den oynayacak."
                 )
 
-            # Başlangıç çizgisi yalnızca dönüş mekiği deadline'larını kapatır.
-            evaluator.check_beep_deadlines(cam1_time, expected_direction="to_near")
+            official_timer = ShuttleTimer(0.0)
+            preview_deadlines = official_timer.get_deadline_times()
+            print(f"[Timer] İlk hedef deadline: {preview_deadlines[0]:.3f}s (çıkıştan sonra)")
+            official_timer.print_schedule(max_levels=2)
 
-        if cam2_time >= 0:
-            for r in runners2:
-                # Tek video simülasyonunda aynı track ID aynı yarışmacı kabul edilir.
-                eval_id = r.track_id if (real_dual_camera or CAM2_SHARE_TRACK_IDS) else r.track_id + CAM2_ID_OFFSET
-                foot_y = float(r.bbox[3])
-                evaluator.update_camera_line(
-                    eval_id,
-                    r.ankle_mid_x,
-                    foot_y,
-                    cam2_time,
-                    target_line="far",
-                )
+        fallback = official_timer
 
-            # 20m kamerası 9s ileriden okunduğu için sadece 20m varışlarını kontrol eder.
-            evaluator.check_beep_deadlines(cam2_time, expected_direction="to_far")
+        # ------------------------------------------------------------------
+        # 4. Kalibrasyon - her kameranın ilk karesinden
+        # ------------------------------------------------------------------
+        print("\n[Kalibrasyon] İlk kareler alınıyor...")
+        ret1, frame1_cal = cap1.read()
+        ret2, frame2_cal = cap2.read()
+        if not ret1 or not ret2:
+            print("[HATA] İlk kareler okunamadı.")
+            raise RuntimeError("Video veya ses kaynagi okunamadi.")
 
-        # Bip flash animasyonu
-        while last_bip_i1 < len(beep_times_list):
-            bt = beep_times_list[last_bip_i1]
-            if cam1_time >= bt:
-                bip_flash1 = BIP_DUR
-                last_bip_i1 += 1
-            else:
-                break
+        # Kamera başlarını sıfırla
+        cap1.set(cv2.CAP_PROP_POS_MSEC, start_time_sec * 1000)
+        cap2.set(cv2.CAP_PROP_POS_MSEC, cam2_start * 1000)
 
-        while last_bip_i2 < len(beep_times_list):
-            bt = beep_times_list[last_bip_i2]
-            if cam2_time >= bt:
-                bip_flash2 = BIP_DUR
-                last_bip_i2 += 1
-            else:
-                break
+        if start_line_points is None or far_line_points is None:
+            start_line_points, far_line_points = calibrate_cameras(
+                frame1_cal, frame2_cal, use_config_lines=use_config_lines,
+            )
+        start_line_profile_base = PerspectiveLine.from_points(start_line_points)
+        far_line_profile_base = PerspectiveLine.from_points(far_line_points)
+        for profile, width, height in ((start_line_profile_base, w, h), (far_line_profile_base, w2, h2)):
+            if any(not (0 <= x < width and 0 <= y < height) for x, y in profile.points):
+                raise ValueError("Kalibrasyon noktasi goruntu sinirlari disinda.")
+        start_line_y = start_line_profile_base.median_y
+        far_line_y = far_line_profile_base.median_y
+        print(f"  Perspektif başlangıç çizgisi: {[(int(x), int(y)) for x, y in start_line_profile_base.points]}")
+        print(f"  Perspektif 20m çizgisi      : {[(int(x), int(y)) for x, y in far_line_profile_base.points]}")
 
-        bip_flash1 = max(0, bip_flash1 - 1)
-        bip_flash2 = max(0, bip_flash2 - 1)
-        start_flash1 = max(0, start_flash1 - 1)
-        start_flash2 = max(0, start_flash2 - 1)
+        if display:
+            preview1 = frame1_cal.copy()
+            preview2 = frame2_cal.copy()
+            start_line_profile_base.draw(preview1, COLOR_START_LINE, LINE_THICKNESS)
+            cv2.putText(preview1, "KAMERA 1 - BASLANGIC (0m)",
+                        (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_START_LINE, 2)
+            far_line_profile_base.draw(preview2, COLOR_FAR_LINE, LINE_THICKNESS)
+            cv2.putText(preview2, "KAMERA 2 - 20m",
+                        (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, COLOR_FAR_LINE, 2)
+            preview_dual = build_side_by_side(preview1, preview2, target_w=min(640, w))
+            cv2.namedWindow("Mekik Testi - Cift Kamera Tek Ekran", cv2.WINDOW_NORMAL)
+            cv2.imshow("Mekik Testi - Cift Kamera Tek Ekran", preview_dual)
+            cv2.waitKey(500)
 
-        # ----------------------------------------------------------
-        # Görselleştirme
-        # ----------------------------------------------------------
-        ann1 = frame1.copy()
-        ann2 = frame2.copy()
+        # ------------------------------------------------------------------
+        # 5. Modüller
+        # ------------------------------------------------------------------
+        print("\n[Modüller] Başlatılıyor...")
+        tracker1 = PoseTracker()
+        tracker2 = PoseTracker()
 
-        # Koşucuları çiz
-        draw_runners_on_frame(ann1, runners1, evaluator, cam1_time, id_offset=0)
-        draw_runners_on_frame(
-            ann2,
-            runners2,
-            evaluator,
-            cam2_time,
-            id_offset=0 if (real_dual_camera or CAM2_SHARE_TRACK_IDS) else CAM2_ID_OFFSET,
+        # Adaptadores de cone (se habilitado)
+        start_cone_adapter = None
+        far_cone_adapter = None
+        if ENABLE_CONE_DETECTION and CONE_DETECTOR_AVAILABLE:
+            print(f"[Cones] Detecção dinamica habilitada")
+            start_cone_adapter = ConeLineAdapter(w, h)
+            far_cone_adapter = ConeLineAdapter(w2, h2)
+        elif ENABLE_CONE_DETECTION and not CONE_DETECTOR_AVAILABLE:
+            print("[AVISO] cone_detector nao disponivel, usando linhas fixas")
+
+        evaluator = DualLineEvaluator(
+            start_line_y=start_line_y,
+            far_line_y=far_line_y,
+            beep_times=run_beep_times,
+            start_line_profile=start_line_profile_base,
+            far_line_profile=far_line_profile_base,
+            fallback_timer=fallback,
+            start_target_side="below",
+            far_target_side="below" if real_dual_camera else "above",
+        )
+        beep_times_list = evaluator.get_beep_times()
+
+        start_lane_assigner = LaneAssigner(
+            lane_count=runner_count,
+            frame_width=w,
+            reverse_view=False,
+            lane_x_min=start_line_profile_base.min_x,
+            lane_x_max=start_line_profile_base.max_x,
+        )
+        far_lane_assigner = LaneAssigner(
+            lane_count=runner_count,
+            frame_width=w2,
+            reverse_view=True,
+            lane_x_min=far_line_profile_base.min_x,
+            lane_x_max=far_line_profile_base.max_x,
         )
 
-        # Çizgi + HUD
-        shuttle_info1 = official_timer.get_current_shuttle(cam1_time) if official_timer and cam1_time >= 0 else None
-        shuttle_info2 = official_timer.get_current_shuttle(cam2_time) if official_timer and cam2_time >= 0 else None
-        draw_camera_overlay(ann1, "KAMERA 1 — BASLANGIC (0m)",
-                            current_start_line_profile, COLOR_START_LINE,
-                            cam1_time,
-                            (start_flash1 > 0 or bip_flash1 > 0),
-                            evaluator,
-                            beep_times_list,
-                            shuttle_info=shuttle_info1,
-                            bip_label="CIKIS BIPI!" if start_flash1 > 0 else "BIP!")
-        draw_camera_overlay(ann2, "KAMERA 2 — 20m CIZGISI",
-                            current_far_line_profile, COLOR_FAR_LINE,
-                            cam2_time,
-                            (start_flash2 > 0 or bip_flash2 > 0),
-                            evaluator,
-                            beep_times_list,
-                            shuttle_info=shuttle_info2,
-                            bip_label="CIKIS BIPI!" if start_flash2 > 0 else "BIP!")
-        
-        # Debug: desenha cones detectados (se habilitado)
-        if CONE_DEBUG_DRAW:
-            if start_cone_adapter is not None:
-                start_cone_adapter.draw_debug_cones(ann1)
-            if ret2 and far_cone_adapter is not None:
-                far_cone_adapter.draw_debug_cones(ann2)
+        line_tracker_cfg = LineTrackerConfig(
+            search_margin_px=LINE_TRACK_SEARCH_MARGIN_PX,
+            min_confidence=LINE_TRACK_MIN_CONFIDENCE,
+            smoothing_alpha=LINE_TRACK_SMOOTHING_ALPHA,
+            max_step_px=LINE_TRACK_MAX_STEP_PX,
+        )
+        start_line_tracker = HorizontalLineTracker(start_line_y, line_tracker_cfg)
+        far_line_tracker = HorizontalLineTracker(far_line_y, line_tracker_cfg)
 
-        # Yan yana panel (çıktı video)
-        dual = build_side_by_side(ann1, ann2, target_w=panel_w)
-        writer.write(dual)
+        start_motion = far_motion = None
+        if motion_compensation:
+            motion_cfg = MotionCompensatorConfig(update_every=MOTION_COMP_UPDATE_EVERY)
+            start_motion = CameraMotionCompensator(frame1_cal, start_line_profile_base, motion_cfg)
+            far_motion = CameraMotionCompensator(frame2_cal, far_line_profile_base, motion_cfg)
 
-        # Ekran gösterimi
-        if display and frame_idx % DISPLAY_EVERY_N_FRAMES == 0:
-            cv2.imshow(WIN_DUAL, dual)
-            key = cv2.waitKey(1) & 0xFF
-            if key in (27, ord("q")):
-                print("\n[Kullanıcı] Durduruldu.")
+        # ------------------------------------------------------------------
+        # 6. Çıktı video (yan yana, 640px per panel)
+        # ------------------------------------------------------------------
+        panel_w   = min(640, w)
+        panel_h   = max(int(h * panel_w / w), int(h2 * panel_w / w2))
+        panel_h += panel_h % 2
+        out_w     = panel_w * 2 + 4
+        out_h     = panel_h + 128 + 38 + 108 * max(1, math.ceil(runner_count / 5))
+        out_stem = f"{start_video_path.stem}_{far_video_path.stem}" if real_dual_camera else start_video_path.stem
+        out_path  = output_dir / f"{out_stem}_dual_camera.mp4"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        writer = cv2.VideoWriter(
+            str(out_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (out_w, out_h)
+        )
+        resources.callback(writer.release)
+        if not writer.isOpened():
+            raise RuntimeError(f"Cikti videosu acilamadi: {out_path}")
+
+        # ------------------------------------------------------------------
+        # 7. Pencereler
+        # ------------------------------------------------------------------
+        WIN_DUAL = "Mekik Testi - Cift Kamera Tek Ekran"
+
+        if display:
+            cv2.namedWindow(WIN_DUAL, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(WIN_DUAL, out_w, out_h)
+
+        # ------------------------------------------------------------------
+        # 8. İşleme döngüsü
+        # ------------------------------------------------------------------
+        print(f"\n[İşleme] Başlıyor - q veya ESC ile dur")
+        if real_dual_camera:
+            print("  ID eşleştirme: 0m soldan-sağa, 20m sağdan-sola ortak kulvar ID")
+        else:
+            print(f"  ID eşleştirme: {'tek video simülasyonu (ortak ID)' if CAM2_SHARE_TRACK_IDS else 'kamera ofsetli ID'}")
+        frame_idx    = 0
+        analyzed_frames = 0
+        completion_reason = "video_end"
+        dual = None
+        proc_fps     = 0.0
+        t_wall_start = time.time()
+        remaining    = total_f - int(start_time_sec * fps)
+
+        bip_flash1 = 0   # Kamera 1 bip animasyon sayacı
+        bip_flash2 = 0   # Kamera 2 bip animasyon sayacı
+        BIP_DUR    = max(1, int(fps * 0.4))
+        last_bip_i1 = 0
+        last_bip_i2 = 0
+        start_flash1 = 0
+        start_flash2 = 0
+        start_bip_fired1 = False
+        start_bip_fired2 = False
+
+        cam2_frame_idx = int(round(cam2_start * fps2)) - 1
+        frame2_cached = None
+        while True:
+            ret1, frame1 = cap1.read()
+            if not ret1:
                 break
 
-        proc_fps  = 1.0 / (time.time() - t0 + 1e-9)
-        frame_idx += 1
-
-        if display and REALTIME_PREVIEW:
-            target_frame_idx = int((time.time() - t_wall_start) * fps)
-            skip_count = min(
-                MAX_REALTIME_FRAME_SKIP,
-                max(0, target_frame_idx - frame_idx),
-            )
-            if max_frames is not None:
-                skip_count = min(skip_count, max(0, max_frames - frame_idx))
-
-            for _ in range(skip_count):
-                ret_skip1 = cap1.grab()
-                ret_skip2 = cap2.grab()
-                if not ret_skip1:
+            cam1_video_time = start_time_sec + frame_idx / fps
+            target_cam2_idx = int(round((cam1_video_time + cam2_offset_sec) * fps2))
+            ret2 = frame2_cached is not None
+            while cam2_frame_idx < target_cam2_idx:
+                ret2, frame2_cached = cap2.read()
+                cam2_frame_idx += 1
+                if not ret2:
                     break
-                if not ret_skip2:
-                    pass
-                writer.write(dual)
-                frame_idx += 1
+            if not ret2:
+                print("[Video] Kamera 2 sona erdi; ortak analiz araligi tamamlandi.")
+                completion_reason = "camera2_end"
+                break
+            frame2 = frame2_cached.copy()
 
-        if max_frames is not None and frame_idx >= max_frames:
-            print(f"\n[Test] max_frames={max_frames} sınırında duruldu.")
-            break
+            t0 = time.time()
 
-        if frame_idx % 150 == 0:
-            pct = frame_idx / remaining * 100 if remaining > 0 else 0
-            print(f"  {frame_idx}/{remaining} ({pct:.1f}%) | "
-                  f"{proc_fps:.1f} FPS | {time.time()-t_wall_start:.0f}s")
+            # Zaman hesabı. CAP_PROP_POS_MSEC farklı FPS'li iki gerçek kamerada
+            # frame index varsayımından daha doğru sonuç verir.
+            cam2_video_time = cam2_frame_idx / fps2
+            cam1_time = cam1_video_time - run_zero_time_sec
+            cam2_time = cam2_video_time - run_zero_time_sec - (cam2_offset_sec if real_dual_camera else 0)
 
-    # ------------------------------------------------------------------
-    # 9. Temizlik + Rapor
-    # ------------------------------------------------------------------
-    cap1.release()
-    cap2.release()
-    writer.release()
-    if display:
-        cv2.destroyAllWindows()
+            current_start_line_profile = start_line_profile_base
+            current_far_line_profile = far_line_profile_base
 
-    elapsed = time.time() - t_wall_start
-    print(f"\n{'='*65}")
-    print(f"  Tamamlandı! {frame_idx} kare — {elapsed:.1f}s")
-    print(f"  Çıktı : {out_path}")
-    print(f"{'='*65}")
+            # Detecção dinâmica de cones (substitui linha fixa se habilitada)
+            if ENABLE_CONE_DETECTION and start_cone_adapter is not None:
+                try:
+                    cone_start_line = start_cone_adapter.detect_and_create_line(frame1)
+                    if cone_start_line is not None:
+                        current_start_line_profile = cone_start_line
+                except Exception as e:
+                    print(f"[Dual] Erro na detecção de cones da câmera 1: {e}")
 
-    print(f"\n  SONUÇ RAPORU")
-    print(f"{'='*65}")
-    df = evaluator.get_results_dataframe()
-    print(df.to_string(index=False) if not df.empty else "  Koşucu tespit edilmedi.")
+                if ret2 and far_cone_adapter is not None:
+                    try:
+                        cone_far_line = far_cone_adapter.detect_and_create_line(frame2)
+                        if cone_far_line is not None:
+                            current_far_line_profile = cone_far_line
+                    except Exception as e:
+                        print(f"[Dual] Erro na detecção de cones da câmera 2: {e}")
 
-    evaluator.export_results(DATA_OUTPUTS)
-    print(f"  Raporlar: {DATA_OUTPUTS}")
-    print(f"{'='*65}\n")
+                # Atualiza evaluador com as linhas detectadas (quer sejam de cones ou base)
+                evaluator.start_line_y = current_start_line_profile.median_y
+                evaluator.far_line_y = current_far_line_profile.median_y
+                evaluator.start_line_profile = current_start_line_profile
+                evaluator.far_line_profile = current_far_line_profile
+
+            # Telefon kamerasi kaymasi: cizgileri kalibrasyon karesinden guncel kareye tasi
+            elif start_motion is not None:
+                current_start_line_profile = start_motion.update(frame1)
+                current_far_line_profile = far_motion.update(frame2)
+                evaluator.start_line_y = current_start_line_profile.median_y
+                evaluator.far_line_y = current_far_line_profile.median_y
+                evaluator.start_line_profile = current_start_line_profile
+                evaluator.far_line_profile = current_far_line_profile
+
+            # Rastreamento automático de linha (se habilitado e cones desabilitados)
+            elif ENABLE_AUTO_LINE_TRACKING:
+                current_start_line_y = start_line_tracker.update(frame1)
+                current_start_line_profile = start_line_profile_base.shifted(
+                    current_start_line_y - start_line_profile_base.median_y
+                )
+                if ret2:
+                    current_far_line_y = far_line_tracker.update(frame2)
+                    current_far_line_profile = far_line_profile_base.shifted(
+                        current_far_line_y - far_line_profile_base.median_y
+                    )
+                evaluator.start_line_y = current_start_line_profile.median_y
+                evaluator.far_line_y = current_far_line_profile.median_y
+                evaluator.start_line_profile = current_start_line_profile
+                evaluator.far_line_profile = current_far_line_profile
+
+            if not start_bip_fired1 and cam1_time >= 0:
+                start_flash1 = BIP_DUR
+                start_bip_fired1 = True
+            if not start_bip_fired2 and cam2_time >= 0:
+                start_flash2 = BIP_DUR
+                start_bip_fired2 = True
+
+            # Poz tespiti - iki tracker bağımsız
+            runners1 = tracker1.process_frame(frame1)
+            runners2 = tracker2.process_frame(frame2) if ret2 else []
+            if real_dual_camera:
+                runners1 = start_lane_assigner.assign(runners1)
+                runners2 = far_lane_assigner.assign(runners2)
+
+            # Değerlendirici güncelleme. Çıkış bipinden önceki hareketler sayılmaz.
+            if cam1_time >= 0:
+                for r in runners1:
+                    foot_y = float(r.bbox[3])
+                    evaluator.update_camera_line(
+                        r.track_id,
+                        r.ankle_mid_x,
+                        foot_y,
+                        cam1_time,
+                        target_line="start",
+                    )
+
+                # Başlangıç çizgisi yalnızca dönüş mekiği deadline'larını kapatır.
+
+
+            if cam2_time >= 0:
+                for r in runners2:
+                    # Tek video simülasyonunda aynı track ID aynı yarışmacı kabul edilir.
+                    eval_id = r.track_id if (real_dual_camera or CAM2_SHARE_TRACK_IDS) else r.track_id + CAM2_ID_OFFSET
+                    foot_y = float(r.bbox[3])
+                    evaluator.update_camera_line(
+                        eval_id,
+                        r.ankle_mid_x,
+                        foot_y,
+                        cam2_time,
+                        target_line="far",
+                    )
+
+                # 20m kamerası 9s ileriden okunduğu için sadece 20m varışlarını kontrol eder.
+                if real_dual_camera:
+                    evaluator.check_beep_deadlines(cam1_time)
+                else:
+                    evaluator.check_beep_deadlines(cam1_time, expected_direction="to_near")
+                    evaluator.check_beep_deadlines(cam2_time, expected_direction="to_far")
+
+            # Bip flash animasyonu
+            while last_bip_i1 < len(beep_times_list):
+                bt = beep_times_list[last_bip_i1]
+                if cam1_time >= bt:
+                    bip_flash1 = BIP_DUR
+                    last_bip_i1 += 1
+                else:
+                    break
+
+            while last_bip_i2 < len(beep_times_list):
+                bt = beep_times_list[last_bip_i2]
+                if cam2_time >= bt:
+                    bip_flash2 = BIP_DUR
+                    last_bip_i2 += 1
+                else:
+                    break
+
+            bip_flash1 = max(0, bip_flash1 - 1)
+            bip_flash2 = max(0, bip_flash2 - 1)
+            start_flash1 = max(0, start_flash1 - 1)
+            start_flash2 = max(0, start_flash2 - 1)
+
+            # ----------------------------------------------------------
+            # Görselleştirme
+            # ----------------------------------------------------------
+            ann1 = frame1.copy()
+            ann2 = frame2.copy()
+
+            # Koşucuları çiz
+            draw_runners_on_frame(ann1, runners1, evaluator, cam1_time, id_offset=0)
+            draw_runners_on_frame(
+                ann2,
+                runners2,
+                evaluator,
+                cam2_time,
+                id_offset=0 if (real_dual_camera or CAM2_SHARE_TRACK_IDS) else CAM2_ID_OFFSET,
+            )
+
+            # Çizgi + HUD
+            shuttle_info1 = official_timer.get_current_shuttle(cam1_time) if official_timer and cam1_time >= 0 else None
+            shuttle_info2 = official_timer.get_current_shuttle(cam2_time) if official_timer and cam2_time >= 0 else None
+            draw_camera_overlay(ann1, "KAMERA 1 - BASLANGIC (0m)",
+                                current_start_line_profile, COLOR_START_LINE,
+                                cam1_time,
+                                (start_flash1 > 0 or bip_flash1 > 0),
+                                evaluator,
+                                beep_times_list,
+                                shuttle_info=shuttle_info1,
+                                bip_label="CIKIS BIPI!" if start_flash1 > 0 else "BIP!")
+            draw_camera_overlay(ann2, "KAMERA 2 - 20m CIZGISI",
+                                current_far_line_profile, COLOR_FAR_LINE,
+                                cam2_time,
+                                (start_flash2 > 0 or bip_flash2 > 0),
+                                evaluator,
+                                beep_times_list,
+                                shuttle_info=shuttle_info2,
+                                bip_label="CIKIS BIPI!" if start_flash2 > 0 else "BIP!")
+
+            # Debug: desenha cones detectados (se habilitado)
+            if CONE_DEBUG_DRAW:
+                if start_cone_adapter is not None:
+                    start_cone_adapter.draw_debug_cones(ann1)
+                if ret2 and far_cone_adapter is not None:
+                    far_cone_adapter.draw_debug_cones(ann2)
+
+            # Yan yana panel (çıktı video)
+            dual = build_side_by_side(ann1, ann2, target_w=panel_w)
+            dual = render_dashboard(dual, evaluator, cam1_time, shuttle_info1,
+                                    beep_times_list, runner_count,
+                                    progress=(frame_idx+1)/max(1,remaining),
+                                    approximate=realtime_preview)
+            writer.write(dual)
+            frame_idx += 1
+            analyzed_frames += 1
+
+            # Ekran gösterimi
+            if display and frame_idx % DISPLAY_EVERY_N_FRAMES == 0:
+                cv2.imshow(WIN_DUAL, dual)
+                key = cv2.waitKey(1) & 0xFF
+                if key in (27, ord("q")):
+                    print("\n[Kullanıcı] Durduruldu.")
+                    completion_reason = "user_stop"
+                    break
+
+            proc_fps  = 1.0 / (time.time() - t0 + 1e-9)
+
+            if display and realtime_preview:
+                target_frame_idx = int((time.time() - t_wall_start) * fps)
+                # Islem videodan hizliysa bekle; video olagan hizinda aksin.
+                ahead_sec = (frame_idx - target_frame_idx) / fps
+                if ahead_sec > 0.002:
+                    key = cv2.waitKey(max(1, int(ahead_sec * 1000))) & 0xFF
+                    if key in (27, ord("q")):
+                        print("\n[Kullanıcı] Durduruldu.")
+                        completion_reason = "user_stop"
+                        break
+                skip_count = min(
+                    MAX_REALTIME_FRAME_SKIP,
+                    max(0, target_frame_idx - frame_idx),
+                )
+                if max_frames is not None:
+                    skip_count = min(skip_count, max(0, max_frames - frame_idx))
+
+                for _ in range(skip_count):
+                    ret_skip1 = cap1.grab()
+                    ret_skip2 = True
+                    if not ret_skip1:
+                        break
+                    if not ret_skip2:
+                        pass
+                    writer.write(dual)
+                    frame_idx += 1
+
+            if max_frames is not None and frame_idx >= max_frames:
+                print(f"\n[Test] max_frames={max_frames} sınırında duruldu.")
+                completion_reason = "max_frames"
+                break
+
+            if frame_idx % 150 == 0:
+                pct = frame_idx / remaining * 100 if remaining > 0 else 0
+                print(f"  {frame_idx}/{remaining} ({pct:.1f}%) | "
+                      f"{proc_fps:.1f} FPS | {time.time()-t_wall_start:.0f}s")
+
+        # ------------------------------------------------------------------
+        # 9. Temizlik + Rapor
+        # ------------------------------------------------------------------
+        cap1.release()
+        cap2.release()
+        writer.release()
+
+        elapsed = time.time() - t_wall_start
+        print(f"\n{'='*65}")
+        print(f"  Tamamlandı! {frame_idx} kare - {elapsed:.1f}s")
+        print(f"  Çıktı : {out_path}")
+        print(f"{'='*65}")
+
+        print(f"\n  SONUÇ RAPORU")
+        print(f"{'='*65}")
+        df = evaluator.get_results_dataframe()
+        print(df.to_string(index=False) if not df.empty else "  Koşucu tespit edilmedi.")
+
+        evaluator.export_results(output_dir)
+        metadata = {"processed_frames": frame_idx, "analyzed_frames": analyzed_frames,
+                    "approximate": bool(display and realtime_preview),
+                    "completion_reason": completion_reason,
+                    "elapsed_seconds": round(elapsed, 3),
+                    "output_video": str(out_path), "start_video": str(start_video_path),
+                    "far_video": str(far_video_path), "run_zero_seconds": run_zero_time_sec,
+                    "start_line": start_line_points, "far_line": far_line_points,
+                    "runner_count": len(df), "mode": "real_dual" if real_dual_camera else "simulation",
+                    "motion_compensation": None if start_motion is None else {
+                        cam: {"ok_updates": m.ok_updates, "failed_updates": m.failed_updates,
+                              "final_offset_px": round(m.offset_px, 1)}
+                        for cam, m in (("start", start_motion), ("far", far_motion))}}
+        metadata["analysis_status"] = "ok" if len(df) else "no_runners_detected"
+        (output_dir / "run_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        final_frame = None
+        if dual is not None:
+            final_frame = render_dashboard(build_side_by_side(ann1, ann2, target_w=panel_w),
+                evaluator, cam1_time, shuttle_info1, beep_times_list, runner_count,
+                progress=frame_idx/max(1, remaining), approximate=realtime_preview, finished=True)
+        export_visual_report(output_dir, metadata, evaluator, final_frame)
+        print(f"  Raporlar: {output_dir}")
+        print(f"{'='*65}\n")
+        if display and hold_open and completion_reason in {"video_end", "camera2_end"}:
+            if final_frame is not None:
+                cv2.imshow(WIN_DUAL, final_frame)
+            print("[Goruntu] Raporlar hazir. Pencereyi kapatmak icin bir tusa basin.", flush=True)
+            cv2.waitKey(0)
+        if display:
+            cv2.destroyAllWindows()
+        return metadata
 
 
 # ==============================================================================
@@ -1289,11 +1394,20 @@ def main():
     parser.add_argument("--video", "-v", type=str, default=None,
                         help="Eski mod: tek video + kamera 2 zaman ofseti simülasyonu")
     parser.add_argument("--start-video", type=str, default=None,
-                        help="0m / başlangıç kamerası videosu (varsayılan: 0metre.mp4)")
+                        help="0m / başlangıç kamerası videosu (varsayılan: data/inputs/ornek_kayit/0metre.mp4)")
     parser.add_argument("--far-video", type=str, default=None,
-                        help="20m kamerası videosu (varsayılan: 20metre.mp4)")
+                        help="20m kamerası videosu (varsayılan: data/inputs/ornek_kayit/20metre.mp4)")
     parser.add_argument("--no-display", action="store_true")
+    parser.add_argument("--hold-open", action="store_true", help="Video sonunda goruntu penceresini acik tut")
+    parser.add_argument("--realtime-preview", action="store_true",
+                        help="Hizli on izleme icin kare atla; sonuclar yaklasik olarak isaretlenir")
     parser.add_argument("--no-audio", action="store_true")
+    parser.add_argument("--output-dir", type=Path, default=None,
+                        help="Video ve raporlar icin ayri cikti klasoru")
+    parser.add_argument("--runner-count", type=int, default=EXPECTED_RUNNER_COUNT,
+                        help="Parkurdaki gercek kosucu sayisi")
+    parser.add_argument("--start-line", type=str, help="0m cizgisi: x1,y1;x2,y2")
+    parser.add_argument("--far-line", type=str, help="20m cizgisi: x1,y1;x2,y2")
     parser.add_argument("--start-time", type=float, default=VIDEO_START_TIME_SEC,
                         help=f"Koşu başlangıcı (varsayılan: {VIDEO_START_TIME_SEC}s)")
     parser.add_argument("--cam2-offset", type=float, default=None,
@@ -1306,9 +1420,26 @@ def main():
                         help="Referans bip sesini içeren YouTube URL'si")
     parser.add_argument("--start-beep-time", type=float, default=None,
                         help="Manuel çıkış bipi video saniyesi; sonrası resmi mekik temposuyla hesaplanır")
+    parser.add_argument("--no-motion-compensation", action="store_true",
+                        help="Telefon kamerasi kayma telafisini kapat (sabit cizgi)")
     parser.add_argument("--use-config-lines", action="store_true",
                         help="Fareyle seçmek yerine config.py içindeki hazır çift kamera çizgilerini kullan")
     args = parser.parse_args()
+    def parse_line(value):
+        if value is None:
+            return None
+        try:
+            points = [tuple(map(int, point.split(","))) for point in value.split(";")]
+            if any(len(point) != 2 for point in points):
+                raise ValueError
+            PerspectiveLine.from_points(points)
+            return points
+        except (ValueError, TypeError):
+            parser.error("Cizgi formati: x1,y1;x2,y2 (en az iki farkli X)")
+    start_points = parse_line(args.start_line)
+    far_points = parse_line(args.far_line)
+    if bool(start_points) != bool(far_points):
+        parser.error("--start-line ve --far-line birlikte verilmelidir.")
 
     start_video, far_video, real_dual_camera = find_dual_videos(
         args.video,
@@ -1339,6 +1470,13 @@ def main():
         beep_audio_url=args.beep_audio_url,
         start_beep_time_override=args.start_beep_time,
         use_config_lines=args.use_config_lines,
+        start_line_points=start_points,
+        far_line_points=far_points,
+        output_dir=args.output_dir,
+        runner_count=args.runner_count,
+        hold_open=args.hold_open,
+        realtime_preview=args.realtime_preview,
+        motion_compensation=not args.no_motion_compensation,
     )
 
 

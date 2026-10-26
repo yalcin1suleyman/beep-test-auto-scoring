@@ -24,6 +24,10 @@ class PerspectiveLine:
         ordered = tuple((float(x), float(y)) for x, y in sorted(points, key=lambda p: p[0]))
         if len(ordered) < 2:
             raise ValueError("PerspectiveLine en az iki nokta ister.")
+        if not all(np.isfinite(x) and np.isfinite(y) for x, y in ordered):
+            raise ValueError("Cizgi koordinatlari sonlu olmalidir.")
+        if any(a[0] == b[0] for a, b in zip(ordered, ordered[1:])):
+            raise ValueError("Cizgi noktalarinin X koordinatlari farkli olmalidir.")
         return cls(ordered)
 
     @classmethod
