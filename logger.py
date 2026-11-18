@@ -44,7 +44,8 @@ def setup_logger(name: str = "mekik_test", level=logging.DEBUG) -> logging.Logge
     
     # 1. Dosya handler — tüm mesajlar dosyaya
     try:
-        file_handler = logging.FileHandler(log_filename, encoding='utf-8')
+        # delay=True: dosya ilk kayitta acilir; hic yazilmazsa bos log dosyasi birakilmaz.
+        file_handler = logging.FileHandler(log_filename, encoding='utf-8', delay=True)
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)

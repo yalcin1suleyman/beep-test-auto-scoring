@@ -6,7 +6,7 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/run_sessions.py",
-      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "python": "${command:python.interpreterPath}",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "env": {
@@ -22,7 +22,7 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/run_sessions.py",
-      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "python": "${command:python.interpreterPath}",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "env": {
@@ -40,7 +40,7 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/run_sessions.py",
-      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "python": "${command:python.interpreterPath}",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "env": {
@@ -58,7 +58,7 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/run_sessions.py",
-      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "python": "${command:python.interpreterPath}",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "env": {
@@ -76,7 +76,7 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/run_sessions.py",
-      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "python": "${command:python.interpreterPath}",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "env": {
@@ -94,7 +94,7 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/run_sessions.py",
-      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "python": "${command:python.interpreterPath}",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "env": {
@@ -112,7 +112,7 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/run_sessions.py",
-      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "python": "${command:python.interpreterPath}",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "env": {
@@ -130,7 +130,7 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/run_sessions.py",
-      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "python": "${command:python.interpreterPath}",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "env": {
@@ -148,7 +148,7 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/run_sessions.py",
-      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "python": "${command:python.interpreterPath}",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "env": {
@@ -165,7 +165,7 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/dual_main.py",
-      "python": "C:/Users/asusl/AppData/Local/Python/pythoncore-3.14-64/python.exe",
+      "python": "${command:python.interpreterPath}",
       "cwd": "${workspaceFolder}",
       "console": "internalConsole",
       "env": {

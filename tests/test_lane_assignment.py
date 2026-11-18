@@ -26,3 +26,21 @@ def test_opposite_camera_reverses_lane_order():
     lanes = LaneAssigner(3, 101, True, 0, 100)
     assigned = lanes.assign([runner(9,20),runner(8,50),runner(7,80)])
     assert [r.ankle_mid_x for r in assigned] == [80,50,20]
+
+
+def test_background_pose_cannot_steal_lane_identity():
+    from dual_main import filter_line_candidates
+    from line_geometry import PerspectiveLine
+    line = PerspectiveLine.from_points([(0,600),(480,620)])
+    nearby = RunnerData(1,200,590,(180,400,220,610),.85)
+    background = RunnerData(9,60,330,(30,200,90,350),.99)
+    assert filter_line_candidates([background,nearby],line,854) == [nearby]
+
+
+def test_line_roi_moves_with_calibrated_geometry():
+    from dual_main import filter_line_candidates
+    from line_geometry import PerspectiveLine
+    line = PerspectiveLine.from_points([(100,600),(400,620)])
+    r = RunnerData(1,200,590,(180,400,220,610),.85)
+    assert filter_line_candidates([r],line,854) == [r]
+    assert filter_line_candidates([r],line.shifted(-250),854) == []

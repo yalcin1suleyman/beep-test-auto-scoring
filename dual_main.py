@@ -99,7 +99,8 @@ from line_geometry import PerspectiveLine
 from camera_motion import CameraMotionCompensator, MotionCompensatorConfig
 from line_calibrator import DualLineCalibrator
 from validators import validate_video_file
-from video_dashboard import render_dashboard, export_visual_report
+from video_dashboard import render_dashboard
+from result_report import TECH_DIR, write_readable_outputs
 
 # Sistema de detecção dinâmica de cones
 try:
@@ -414,6 +415,19 @@ def assign_lane_ids(
         replace(r, track_id=lane_id)
         for lane_id, r in sorted(best_by_lane.items())
     ]
+
+
+def filter_line_candidates(runners, line_profile, frame_height, margin_ratio=0.14):
+    """Only runners near this camera's finish line can provide scoring evidence.
+
+    Distant spectators and pose-like background objects must not steal lane IDs.
+    Raw detections remain available to the camera-motion mask before this filter.
+    """
+    margin = max(40.0, frame_height * margin_ratio)
+    return [r for r in runners
+            if np.isfinite(r.ankle_mid_x) and np.isfinite(r.bbox[3])
+            and line_profile.min_x <= r.ankle_mid_x <= line_profile.max_x
+            and abs(float(r.bbox[3]) - line_profile.y_at(r.ankle_mid_x)) <= margin]
 
 
 class LaneAssigner:
@@ -772,6 +786,9 @@ def process_dual_camera(
     hold_open: bool = False,
     realtime_preview: bool = False,
     motion_compensation: bool = ENABLE_CAMERA_MOTION_COMPENSATION,
+    report_title: str = "Mekik testi sonucu",
+    report_note: str = "",
+    scoring_eligible: bool = True,
 ):
     start_video_path = validate_video_file(start_video_path)
     far_video_path = far_video_path or start_video_path
@@ -988,14 +1005,15 @@ def process_dual_camera(
         evaluator = DualLineEvaluator(
             start_line_y=start_line_y,
             far_line_y=far_line_y,
-            beep_times=run_beep_times,
+            beep_times=run_beep_times if scoring_eligible else [],
             start_line_profile=start_line_profile_base,
             far_line_profile=far_line_profile_base,
-            fallback_timer=fallback,
+            fallback_timer=fallback if scoring_eligible else None,
             start_target_side="below",
             far_target_side="below" if real_dual_camera else "above",
         )
         beep_times_list = evaluator.get_beep_times()
+        evaluator.scoring_eligible = scoring_eligible
 
         start_lane_assigner = LaneAssigner(
             lane_count=runner_count,
@@ -1035,8 +1053,7 @@ def process_dual_camera(
         panel_h += panel_h % 2
         out_w     = panel_w * 2 + 4
         out_h     = panel_h + 128 + 38 + 108 * max(1, math.ceil(runner_count / 5))
-        out_stem = f"{start_video_path.stem}_{far_video_path.stem}" if real_dual_camera else start_video_path.stem
-        out_path  = output_dir / f"{out_stem}_dual_camera.mp4"
+        out_path  = output_dir / "analiz_videosu.mp4"
         output_dir.mkdir(parents=True, exist_ok=True)
         writer = cv2.VideoWriter(
             str(out_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (out_w, out_h)
@@ -1171,6 +1188,12 @@ def process_dual_camera(
             runners1 = tracker1.process_frame(frame1)
             runners2 = tracker2.process_frame(frame2) if ret2 else []
             if real_dual_camera:
+                start_lane_assigner.lane_x_min = current_start_line_profile.min_x
+                start_lane_assigner.lane_x_max = current_start_line_profile.max_x
+                far_lane_assigner.lane_x_min = current_far_line_profile.min_x
+                far_lane_assigner.lane_x_max = current_far_line_profile.max_x
+                runners1 = filter_line_candidates(runners1, current_start_line_profile, h)
+                runners2 = filter_line_candidates(runners2, current_far_line_profile, h2)
                 runners1 = start_lane_assigner.assign(runners1)
                 runners2 = far_lane_assigner.assign(runners2)
 
@@ -1364,13 +1387,16 @@ def process_dual_camera(
                               "final_offset_px": round(m.offset_px, 1)}
                         for cam, m in (("start", start_motion), ("far", far_motion))}}
         metadata["analysis_status"] = "ok" if len(df) else "no_runners_detected"
-        (output_dir / "run_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        metadata["scoring_eligible"] = scoring_eligible
+        (output_dir / TECH_DIR).mkdir(parents=True, exist_ok=True)
+        (output_dir / TECH_DIR / "run_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
         final_frame = None
         if dual is not None:
             final_frame = render_dashboard(build_side_by_side(ann1, ann2, target_w=panel_w),
                 evaluator, cam1_time, shuttle_info1, beep_times_list, runner_count,
                 progress=frame_idx/max(1, remaining), approximate=realtime_preview, finished=True)
-        export_visual_report(output_dir, metadata, evaluator, final_frame)
+        write_readable_outputs(output_dir, evaluator, metadata, final_frame,
+                               title=report_title, note=report_note)
         print(f"  Raporlar: {output_dir}")
         print(f"{'='*65}\n")
         if display and hold_open and completion_reason in {"video_end", "camera2_end"}:

@@ -25,6 +25,7 @@ import pandas as pd
 from config import DATA_OUTPUTS, DEFAULT_BEEP_AUDIO_URL
 from dual_main import process_dual_camera
 from line_geometry import PerspectiveLine
+from result_report import HTML_FILE, READABLE_SUMMARY_FILE, write_overview
 from run_start import DEFAULT_REACTION_SEC, detect_departure
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -50,6 +51,10 @@ def session_paths(data: dict, session: dict) -> tuple[Path, Path]:
     if not root.is_absolute():
         root = PROJECT_DIR / root
     return root / session["start_video"], root / session["far_video"]
+
+
+def session_output_dir(session: dict) -> Path:
+    return SESSIONS_OUTPUT_DIR / session["name"].lower().replace(" ", "_")
 
 
 def print_sessions(data: dict, sessions: list[dict]) -> None:
@@ -93,7 +98,7 @@ def run_session(data: dict, session: dict, display: bool, max_frames: int | None
     for path in (start_video, far_video):
         if not path.is_file():
             raise FileNotFoundError(f"Video bulunamadi: {path}")
-    output_dir = SESSIONS_OUTPUT_DIR / session["name"].lower().replace(" ", "_")
+    output_dir = session_output_dir(session)
     print(f"\n{'#' * 65}\n  {session['name']}  ->  {output_dir}\n{'#' * 65}")
     if session.get("note"):
         print(f"  NOT: {session['note']}")
@@ -115,6 +120,9 @@ def run_session(data: dict, session: dict, display: bool, max_frames: int | None
         runner_count=int(session["runner_count"]),
         hold_open=hold_open,
         realtime_preview=realtime_preview,
+        report_title=f"{session['name']} – mekik testi sonucu",
+        report_note=session.get("note", ""),
+        scoring_eligible=session.get("scoring_eligible", True),
     )
     if recalibrate and metadata:
         session["start_line"] = format_line(metadata["start_line"])
@@ -124,20 +132,18 @@ def run_session(data: dict, session: dict, display: bool, max_frames: int | None
     return metadata
 
 
-def write_overall_summary(results: list[tuple[dict, dict]]) -> Path | None:
-    rows = []
-    for session, metadata in results:
-        summary_csv = Path(metadata["output_video"]).parent / "sonuc_ozet.csv"
-        if not summary_csv.is_file():
-            continue
-        df = pd.read_csv(summary_csv)
-        df.insert(0, "Kayit", session["name"])
-        rows.append(df)
-    if not rows:
+def update_overview(sessions: list[dict]) -> Path | None:
+    """Analizi bulunan tum kayitlari SONUCLAR.html ve TUM_SONUCLAR.xlsx'e toplar."""
+    results = []
+    for session in sessions:
+        folder = session_output_dir(session)
+        summary_csv = folder / READABLE_SUMMARY_FILE
+        if summary_csv.is_file() and (folder / HTML_FILE).is_file():
+            results.append((session["name"], folder, pd.read_csv(summary_csv), session.get("note", "")))
+    if not results:
         return None
-    out = SESSIONS_OUTPUT_DIR / "tum_kayitlar_ozet.csv"
-    pd.concat(rows, ignore_index=True).to_csv(out, index=False, encoding="utf-8-sig")
-    return out
+    _excel, page = write_overview(results, SESSIONS_OUTPUT_DIR)
+    return page
 
 
 def choose_interactively(sessions: list[dict]) -> list[dict]:
@@ -189,24 +195,20 @@ def main() -> int:
     if not selected:
         return 0
 
-    results = []
     failures = []
     for session in selected:
         try:
-            metadata = run_session(data, session, display=not args.no_display,
+            run_session(data, session, display=not args.no_display,
                                    max_frames=args.max_frames, hold_open=args.hold_open,
                                    recalibrate=args.recalibrate,
                                    realtime_preview=not args.no_display and not args.full_frames)
-            if metadata:
-                results.append((session, metadata))
         except Exception as exc:  # Bir kayit hatasi digerlerini durdurmasin
             print(f"[HATA] {session['name']}: {exc}")
             failures.append(session["name"])
 
-    if len(results) > 1:
-        summary = write_overall_summary(results)
-        if summary:
-            print(f"\nToplu ozet: {summary}")
+    page = update_overview(sessions)
+    if page:
+        print(f"\nTum sonuclar: {page}")
     if failures:
         print(f"Basarisiz kayitlar: {', '.join(failures)}")
         return 1

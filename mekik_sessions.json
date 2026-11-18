@@ -79,6 +79,7 @@
     },
     {
       "id": 7,
+      "scoring_eligible": false,
       "name": "Video 7",
       "start_video": "video_7/baslangic_0m.mp4",
       "far_video": "video_7/bitis_20m.mp4",

@@ -1,0 +1,468 @@
+{
+  "date": "2026-11-18",
+  "generated_utc": "2026-11-18T12:12:10.109692+00:00",
+  "tests_passed": 72,
+  "failures": 0,
+  "source_videos": 14,
+  "source_frames": 50777,
+  "analyzed_timeline_frames": 24298,
+  "scoring_sessions": 6,
+  "code_sha256": "0dc635705731b5c6b9b8a71ced1480856aa6d38c7a28bbcc7cff4d35cc45793f",
+  "sessions": [
+    {
+      "id": 1,
+      "name": "Video 1",
+      "scoring_eligible": true,
+      "frames": 3966,
+      "expected_overlap_frames": 3966,
+      "runners": 4,
+      "continued": 2,
+      "eliminated": 2,
+      "unscored": 0,
+      "elapsed_seconds": 579.995,
+      "validation": {
+        "ok": true,
+        "decoded_output_frames": 3966,
+        "analyzed_frames": 3966,
+        "output_shape": [
+          1106,
+          932,
+          3
+        ],
+        "runners": 4,
+        "detail_rows": 38,
+        "csv_excel_match": true,
+        "duplicate_completions": false,
+        "completion_reason": "video_end",
+        "approximate": false,
+        "validated_at_utc": "2026-11-18T12:10:47.393845+00:00",
+        "video_sha256": "2bb844c2ff9d62a22333e36079272c945280ea0d5562289febaeee4e71dae2d1",
+        "metadata_sha256": "f6ac6bb00049f9baf4bafb534082e7aeb058226e5030d21fd0d8d5ccb2dc0cce"
+      },
+      "note": "Salon bipi bu kayitta neredeyse duyulmuyor. Kosucular 3,7 s'de (2,7 s'deki baslat sinyaliyle) erken kalkiyor ama 7 donusun hepsini Leger temposuna 2,2 s gecikmeyle kusursuz ritimde yapiyor; bu nedenle cikis bipi donuslerin bip araliklarina oturdugu an (4,95 s) alindi. Kamera ofseti iki kamerada duyulan 7 ayakkabi gicirtisi eslestirilerek bulundu.",
+      "start_beep_time": 4.95,
+      "cam2_offset": -0.93
+    },
+    {
+      "id": 2,
+      "name": "Video 2",
+      "scoring_eligible": true,
+      "frames": 3176,
+      "expected_overlap_frames": 3176,
+      "runners": 3,
+      "continued": 2,
+      "eliminated": 1,
+      "unscored": 0,
+      "elapsed_seconds": 397.959,
+      "validation": {
+        "ok": true,
+        "decoded_output_frames": 3176,
+        "analyzed_frames": 3176,
+        "output_shape": [
+          1124,
+          960,
+          3
+        ],
+        "runners": 3,
+        "detail_rows": 60,
+        "csv_excel_match": true,
+        "duplicate_completions": false,
+        "completion_reason": "video_end",
+        "approximate": false,
+        "validated_at_utc": "2026-11-18T12:10:56.317380+00:00",
+        "video_sha256": "9de38fa5205239dd64b5c7e6dc43e5126be0ee352a2c3a68634aeaca05fb0670",
+        "metadata_sha256": "dfd1560786608be89c8fa223861541ea42f8e5d6832db4b06a52b7632b944b81"
+      },
+      "note": "",
+      "start_beep_time": 9.68,
+      "cam2_offset": -0.7
+    },
+    {
+      "id": 3,
+      "name": "Video 3",
+      "scoring_eligible": true,
+      "frames": 4154,
+      "expected_overlap_frames": 4154,
+      "runners": 3,
+      "continued": 2,
+      "eliminated": 1,
+      "unscored": 0,
+      "elapsed_seconds": 528.686,
+      "validation": {
+        "ok": true,
+        "decoded_output_frames": 4154,
+        "analyzed_frames": 4154,
+        "output_shape": [
+          1124,
+          960,
+          3
+        ],
+        "runners": 3,
+        "detail_rows": 79,
+        "csv_excel_match": true,
+        "duplicate_completions": false,
+        "completion_reason": "video_end",
+        "approximate": false,
+        "validated_at_utc": "2026-11-18T12:11:06.712473+00:00",
+        "video_sha256": "c1fda85b4130b9795dc419c16350a56301080ba6858d8ea554a0c040fef119bc",
+        "metadata_sha256": "e6ad46bfa9f22851c842c3c38479a5361aeec1ad39ea75b867d92ab87e4cbf93"
+      },
+      "note": "",
+      "start_beep_time": 8.8,
+      "cam2_offset": 1.48
+    },
+    {
+      "id": 4,
+      "name": "Video 4",
+      "scoring_eligible": true,
+      "frames": 4370,
+      "expected_overlap_frames": 4370,
+      "runners": 3,
+      "continued": 2,
+      "eliminated": 1,
+      "unscored": 0,
+      "elapsed_seconds": 532.758,
+      "validation": {
+        "ok": true,
+        "decoded_output_frames": 4370,
+        "analyzed_frames": 4370,
+        "output_shape": [
+          1124,
+          960,
+          3
+        ],
+        "runners": 3,
+        "detail_rows": 90,
+        "csv_excel_match": true,
+        "duplicate_completions": false,
+        "completion_reason": "video_end",
+        "approximate": false,
+        "validated_at_utc": "2026-11-18T12:11:16.943651+00:00",
+        "video_sha256": "15117d4f3a5e39bf938d3b8132f20d42a5a9c07bbbdf81b7f6a419f561a39f60",
+        "metadata_sha256": "ddba582f739e351fc91a13e51770e9bc35c9f9e446b5f0bb0f6d50bbfa19b4f1"
+      },
+      "note": "",
+      "start_beep_time": 12.6,
+      "cam2_offset": 1.88
+    },
+    {
+      "id": 5,
+      "name": "Video 5",
+      "scoring_eligible": true,
+      "frames": 2004,
+      "expected_overlap_frames": 2004,
+      "runners": 3,
+      "continued": 2,
+      "eliminated": 1,
+      "unscored": 0,
+      "elapsed_seconds": 350.069,
+      "validation": {
+        "ok": true,
+        "decoded_output_frames": 2004,
+        "analyzed_frames": 2004,
+        "output_shape": [
+          1124,
+          960,
+          3
+        ],
+        "runners": 3,
+        "detail_rows": 41,
+        "csv_excel_match": true,
+        "duplicate_completions": false,
+        "completion_reason": "camera2_end",
+        "approximate": false,
+        "validated_at_utc": "2026-11-18T12:11:22.109348+00:00",
+        "video_sha256": "ee728e8238b5ad12e448a6a4490feca7ec15e803e5188cb1b593ff9b6185dd50",
+        "metadata_sha256": "6b64cd854bc69674d927647b2f419dc562e49c7057906168b192cc7f7047b82b"
+      },
+      "note": "Kayit cikis bipinden yaklasik 1 s once basliyor.",
+      "start_beep_time": 1.22,
+      "cam2_offset": 0.2
+    },
+    {
+      "id": 6,
+      "name": "Video 6",
+      "scoring_eligible": true,
+      "frames": 3123,
+      "expected_overlap_frames": 3123,
+      "runners": 4,
+      "continued": 2,
+      "eliminated": 2,
+      "unscored": 0,
+      "elapsed_seconds": 433.653,
+      "validation": {
+        "ok": true,
+        "decoded_output_frames": 3123,
+        "analyzed_frames": 3123,
+        "output_shape": [
+          1134,
+          964,
+          3
+        ],
+        "runners": 4,
+        "detail_rows": 62,
+        "csv_excel_match": true,
+        "duplicate_completions": false,
+        "completion_reason": "video_end",
+        "approximate": false,
+        "validated_at_utc": "2026-11-18T12:12:01.728530+00:00",
+        "video_sha256": "f834ee4cf8e85eb5727f1abed80d719fa0b5c7c2c98e3e743e19f85211c91213",
+        "metadata_sha256": "fac8e0ee09d72dccecdc3e981d3d7a86a2dca556945d80fa6de8febdd1ba5159"
+      },
+      "note": "Baslangic kamerasi yuksekte; en sagdaki kosucu kadraj kenarinda kalabiliyor.",
+      "start_beep_time": 10.44,
+      "cam2_offset": 0.12
+    },
+    {
+      "id": 7,
+      "name": "Video 7",
+      "scoring_eligible": false,
+      "frames": 3505,
+      "expected_overlap_frames": 3505,
+      "runners": 5,
+      "continued": 0,
+      "eliminated": 0,
+      "unscored": 5,
+      "elapsed_seconds": 463.131,
+      "validation": {
+        "ok": true,
+        "decoded_output_frames": 3505,
+        "analyzed_frames": 3505,
+        "output_shape": [
+          634,
+          1284,
+          3
+        ],
+        "runners": 5,
+        "detail_rows": 0,
+        "csv_excel_match": true,
+        "duplicate_completions": false,
+        "completion_reason": "video_end",
+        "approximate": false,
+        "validated_at_utc": "2026-11-18T12:12:09.872274+00:00",
+        "video_sha256": "3c108ef4636f6f4da80c721cb830e45e5fe84c798b708e72a923ed165f859bf2",
+        "metadata_sha256": "9b0b5dcfed50cbcc298757c1eb8a8dc3e592085178f6e2d84c9f5599405cc6c2"
+      },
+      "note": "UYARI: Bu kayit standart bip testi degil. Kosucular ~31 s'de bir calan bip ile gidip donuyor ve aralarda baslangicta bekliyor; bip testi temposuyla puanlama anlamli degildir.",
+      "start_beep_time": 9.9,
+      "cam2_offset": -1.19
+    }
+  ],
+  "sources": [
+    {
+      "session_id": 1,
+      "path": "data/inputs/mekik_video/video_1/baslangic_0m.mp4",
+      "expected_frames": 4038,
+      "decoded_frames": 4038,
+      "fps": 59.9717814797396,
+      "shape": [
+        832,
+        464
+      ],
+      "sha256": "1977b9131f4728aa54c8b18c1373f10eb55e15d2e1f8673682ec2d7f43d545c1",
+      "original_matches": true
+    },
+    {
+      "session_id": 1,
+      "path": "data/inputs/mekik_video/video_1/bitis_20m.mp4",
+      "expected_frames": 2005,
+      "decoded_frames": 2005,
+      "fps": 30.00264362445901,
+      "shape": [
+        854,
+        480
+      ],
+      "sha256": "2c953b7317a58f53b5bed5401d96d1686efa1a898517067b91dfa0d865f1d8d3",
+      "original_matches": true
+    },
+    {
+      "session_id": 2,
+      "path": "data/inputs/mekik_video/video_2/baslangic_0m.mp4",
+      "expected_frames": 3200,
+      "decoded_frames": 3200,
+      "fps": 30.004891422403755,
+      "shape": [
+        850,
+        478
+      ],
+      "sha256": "d7a8127ff5608f7640e7f127f2af930cb0dc4fb746ac7b9b79f5116edd35503f",
+      "original_matches": true
+    },
+    {
+      "session_id": 2,
+      "path": "data/inputs/mekik_video/video_2/bitis_20m.mp4",
+      "expected_frames": 3214,
+      "decoded_frames": 3214,
+      "fps": 30.002651136565895,
+      "shape": [
+        854,
+        480
+      ],
+      "sha256": "4361e4a8e4a03a9830ec123a2522d73573eb2d6ef3355fc0eb6f785d2423b9b2",
+      "original_matches": true
+    },
+    {
+      "session_id": 3,
+      "path": "data/inputs/mekik_video/video_3/baslangic_0m.mp4",
+      "expected_frames": 4154,
+      "decoded_frames": 4154,
+      "fps": 30.004779287986413,
+      "shape": [
+        850,
+        478
+      ],
+      "sha256": "e8f727e692d6f187a75cb9270409711cc74a23f35afbe48b4e0de37ce4762a64",
+      "original_matches": true
+    },
+    {
+      "session_id": 3,
+      "path": "data/inputs/mekik_video/video_3/bitis_20m.mp4",
+      "expected_frames": 4243,
+      "decoded_frames": 4243,
+      "fps": 30.002576228754656,
+      "shape": [
+        854,
+        480
+      ],
+      "sha256": "f2335b303f8ea602c54f6c5787512720186c7a4a266e23d64ed8af039c525409",
+      "original_matches": true
+    },
+    {
+      "session_id": 4,
+      "path": "data/inputs/mekik_video/video_4/baslangic_0m.mp4",
+      "expected_frames": 4370,
+      "decoded_frames": 4370,
+      "fps": 30.004616270863337,
+      "shape": [
+        850,
+        478
+      ],
+      "sha256": "1376a857a00ed1d787077e4726428065bd4585517f4c6d151d4bae25d10d730a",
+      "original_matches": true
+    },
+    {
+      "session_id": 4,
+      "path": "data/inputs/mekik_video/video_4/bitis_20m.mp4",
+      "expected_frames": 4433,
+      "decoded_frames": 4433,
+      "fps": 30.002508669045792,
+      "shape": [
+        854,
+        480
+      ],
+      "sha256": "d0e4eff3fb5dc94421034a4dc9526594109eb0ef919ffa09c5d6358928a499f9",
+      "original_matches": true
+    },
+    {
+      "session_id": 5,
+      "path": "data/inputs/mekik_video/video_5/baslangic_0m.mp4",
+      "expected_frames": 2526,
+      "decoded_frames": 2526,
+      "fps": 30.00489786997429,
+      "shape": [
+        850,
+        478
+      ],
+      "sha256": "8352e7fc80a9a1251cdc4f7db6eae48494e1548b973c2becde8be40d7f093441",
+      "original_matches": true
+    },
+    {
+      "session_id": 5,
+      "path": "data/inputs/mekik_video/video_5/bitis_20m.mp4",
+      "expected_frames": 2008,
+      "decoded_frames": 2008,
+      "fps": 29.972763793325917,
+      "shape": [
+        854,
+        480
+      ],
+      "sha256": "a83a5bf6e0af05ed14a783564379311fdb38ccdc0a4d8fdaea8886598b32c32c",
+      "original_matches": true
+    },
+    {
+      "session_id": 6,
+      "path": "data/inputs/mekik_video/video_6/baslangic_0m.mp4",
+      "expected_frames": 3123,
+      "decoded_frames": 3123,
+      "fps": 30.004896732533254,
+      "shape": [
+        854,
+        480
+      ],
+      "sha256": "adae7c3a881950d980f657e003da413a01e20724fbdc57a2016a1ed5b0412987",
+      "original_matches": true
+    },
+    {
+      "session_id": 6,
+      "path": "data/inputs/mekik_video/video_6/bitis_20m.mp4",
+      "expected_frames": 6298,
+      "decoded_frames": 6298,
+      "fps": 59.99904733173497,
+      "shape": [
+        832,
+        464
+      ],
+      "sha256": "a1d41984ca13075f7ac2d616f24bdf890bcccb95cec0e3a22a16cbf374d810cf",
+      "original_matches": true
+    },
+    {
+      "session_id": 7,
+      "path": "data/inputs/mekik_video/video_7/baslangic_0m.mp4",
+      "expected_frames": 3544,
+      "decoded_frames": 3544,
+      "fps": 30.007431298590028,
+      "shape": [
+        478,
+        848
+      ],
+      "sha256": "6f54af79d3ecf20e7c185610857323c9a787cbb66ea87aa743f23fed36a38b1d",
+      "original_matches": true
+    },
+    {
+      "session_id": 7,
+      "path": "data/inputs/mekik_video/video_7/bitis_20m.mp4",
+      "expected_frames": 3621,
+      "decoded_frames": 3621,
+      "fps": 30.0,
+      "shape": [
+        576,
+        1024
+      ],
+      "sha256": "0829b9e308cad8810babcef4b7da329958726331e61a2c05b61e5d634f9b7ad3",
+      "original_matches": true
+    }
+  ],
+  "rules": {
+    "late_tolerance_seconds": 0.5,
+    "line_touch_tolerance_pixels": 10,
+    "consecutive_late_limit": 2
+  },
+  "runtime": {
+    "python": "3.14.3",
+    "platform": "Windows",
+    "packages": {
+      "ultralytics": "8.4.38",
+      "torch": "2.11.0",
+      "torchvision": "0.26.0",
+      "opencv-python": "4.13.0.92",
+      "numpy": "2.4.4",
+      "pandas": "3.0.2",
+      "openpyxl": "3.1.5",
+      "scipy": "1.17.1",
+      "imageio-ffmpeg": "0.6.0",
+      "yt-dlp": "2026.3.17",
+      "lap": "0.5.13",
+      "pytest": "9.0.3"
+    }
+  },
+  "model_files": [
+    {
+      "path": "models/yolov8n-pose.pt",
+      "sha256": "c6fa93dd1ee4a2c18c900a45c1d864a1c6f7aba75d84f91648a30b7fb641d212"
+    },
+    {
+      "path": "models/custom_bytetrack.yaml",
+      "sha256": "454aec459fcb6ae1a529f3a31a1788fa00878173eec96cc9029921ac5b1e2219"
+    }
+  ]
+}

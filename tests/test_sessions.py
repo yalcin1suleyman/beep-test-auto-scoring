@@ -99,3 +99,57 @@ def test_departure_not_found_while_runners_wait():
     from run_start import find_departure_time
     samples = [(t / 10, [600.0 + (t % 3)]) for t in range(80)]
     assert find_departure_time(samples, line_y=600) is None
+
+
+def test_readable_tables_explain_levels_and_elimination():
+    from config import RunnerState
+    from result_report import ELIMINATED, LATE_WARNING, ON_TIME, readable_tables, shuttle_schedule
+    beeps = [8.43, 16.89, 25.39, 33.88, 42.34, 50.85, 59.37, 67.34, 75.37]
+    schedule = shuttle_schedule(beeps)
+    assert schedule[0]["label"] == "Seviye 1 – 1. mekik" and schedule[0]["target"] == "20 m"
+    assert schedule[7]["label"] == "Seviye 2 – 1. mekik" and schedule[7]["speed_kmh"] == 9.0
+    ev = DualLineEvaluator(200, 100, beeps, start_target_side="below", far_target_side="below",
+                           tolerance_sec=0.0, min_shuttle_interval_sec=0)
+    ev.update_camera_line(1, 50, 90, 0.0, "far")          # kosucu kaydedilsin
+    status = ev.get_runner_status(1)
+    status.crossing_log += [
+        {"time": 7.9, "camera": "20m", "direction": "to_far", "status": "Gecti - bipten once tamamlandi", "shuttle_no": 1},
+        {"time": 16.9, "camera": "baslangic", "direction": "to_near", "status": "GEC - bipten once cizgi gecilmedi", "shuttle_no": 2},
+        {"time": 25.4, "camera": "20m", "direction": "to_far", "status": "ELENDI - bipten once cizgi gecilmedi", "shuttle_no": 3},
+    ]
+    status.state, status.elimination_time = RunnerState.ELIMINATED, 25.4
+    summary, shuttles = readable_tables(ev)
+    row = summary.iloc[0]
+    assert row["Sonuç"] == "Elendi" and row["Tamamlanan mekik"] == 1
+    assert row["Koşulan mesafe (m)"] == 20 and row["Ulaştığı seviye"] == "Seviye 1 – 1. mekik"
+    assert "3. mekik" in row["Elendiği an"] and "20 m" in row["Açıklama"]
+    assert list(shuttles["Sonuç"]) == [ON_TIME, LATE_WARNING, ELIMINATED]
+
+
+def test_nonstandard_session_is_explicitly_unscored():
+    _data, sessions = load_sessions()
+    assert sessions[6]["scoring_eligible"] is False
+
+
+def test_nonstandard_report_does_not_publish_elimination_scores(tmp_path):
+    import pandas as pd
+    from config import RunnerState
+    from result_report import write_readable_outputs
+    ev = DualLineEvaluator(200, 100, [10., 20.])
+    ev.update_camera_line(1, 50, 150, 0, "start")
+    status = ev.get_runner_status(1)
+    status.state, status.elimination_time = RunnerState.ELIMINATED, 21
+    result = write_readable_outputs(tmp_path, ev,
+        {"scoring_eligible": False, "output_video": "analiz_videosu.mp4"})
+    assert result.iloc[0]["Sonuç"] == "Puanlanmadı"
+    assert result.iloc[0]["Tamamlanan mekik"] == "-"
+    assert result.iloc[0]["Elendiği an"] == "-"
+    assert pd.read_csv(tmp_path / "sonuc_mekikler.csv").empty
+    assert "Elenen<b>0</b>" in (tmp_path / "SONUC.html").read_text(encoding="utf-8")
+
+
+def test_csv_and_excel_numeric_types_compare_without_losing_values():
+    import pandas as pd
+    from scripts.verify_analysis_output import canonical_table
+    pd.testing.assert_frame_equal(canonical_table(pd.DataFrame({'hiz': ['9.0', '-', '8.5']})),
+                                  canonical_table(pd.DataFrame({'hiz': [9, None, 8.5]})))

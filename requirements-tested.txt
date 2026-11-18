@@ -1,0 +1,14 @@
+# Tested on Windows with Python 3.14.3, 18 November 2026.
+# Use as constraints: pip install -r requirements-dev.txt -c requirements-tested.txt
+ultralytics==8.4.38
+torch==2.11.0
+torchvision==0.26.0
+opencv-python==4.13.0.92
+numpy==2.4.4
+pandas==3.0.2
+openpyxl==3.1.5
+scipy==1.17.1
+imageio-ffmpeg==0.6.0
+yt-dlp==2026.3.17
+lap==0.5.13
+pytest==9.0.3

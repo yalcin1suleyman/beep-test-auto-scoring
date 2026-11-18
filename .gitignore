@@ -5,6 +5,7 @@ __pycache__/
 data/logs/
 data/outputs/
 .test_tmp/
+/tmp/
 
 # Proje icine kopyalanan buyuk kayitlar (masaustu MEKIK VIDEO klasorunden)
 data/inputs/mekik_video/

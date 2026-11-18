@@ -21,9 +21,9 @@ def test_video_and_reports_ready_before_hold(tmp_path, monkeypatch, stop_key, ex
     holds = []
     def wait(delay):
         if delay == 0:
-            meta = json.loads((out/'run_metadata.json').read_text())
-            assert (out/'analiz_raporu.html').is_file()
-            assert (out/'sonuc_rapor.xlsx').is_file()
+            meta = json.loads((out/'teknik'/'run_metadata.json').read_text())
+            assert (out/'SONUC.html').is_file()
+            assert (out/'SONUC.xlsx').is_file()
             capture = cv2.VideoCapture(meta['output_video'])
             try:
                 assert capture.read()[0]

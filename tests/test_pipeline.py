@@ -83,11 +83,12 @@ def test_different_fps_are_synchronized_and_output_decodes(tmp_path, monkeypatch
         assert cap.read()[0]
     finally:
         cap.release()
-    assert (tmp_path / 'out' / 'sonuc_rapor.xlsx').is_file()
-    assert (tmp_path / 'out' / 'analiz_raporu.html').is_file()
-    assert cv2.imread(str(tmp_path / 'out' / 'sonuc_paneli.jpg')) is not None
+    assert (tmp_path / 'out' / 'SONUC.xlsx').is_file()
+    assert (tmp_path / 'out' / 'SONUC.html').is_file()
+    assert cv2.imread(str(tmp_path / 'out' / 'son_durum.jpg')) is not None
     import pandas as pd
-    assert 'Kosucu ID' in pd.read_csv(tmp_path / 'out' / 'sonuc_ozet.csv').columns
+    assert 'Koşucu' in pd.read_csv(tmp_path / 'out' / 'sonuc_ozet.csv').columns
+    assert 'Kosucu ID' in pd.read_csv(tmp_path / 'out' / 'teknik' / 'ham_ozet.csv').columns
 
 
 def test_mixed_aspect_panels_have_even_output_dimensions():
@@ -109,3 +110,14 @@ def test_synthetic_beeps_are_detected(tmp_path):
     assert len(times) == 2
     assert times[0] == pytest.approx(2.15, abs=.3)
     assert times[1] == pytest.approx(9.15, abs=.3)
+
+
+def test_reference_audio_dashboard_displays_target_without_math_timer(monkeypatch):
+    import video_dashboard
+    labels = []
+    monkeypatch.setattr(video_dashboard,'text',lambda _frame,label,*args,**kwargs: labels.append(label))
+    ev = Mock(get_active_count=Mock(return_value=0), get_all_runner_statuses=Mock(return_value={}))
+    ev.scoring_eligible = True
+    video_dashboard.render_dashboard(np.zeros((100,900,3),np.uint8),ev,12,None,[8.5,17,25.5],3)
+    assert 'HEDEF  0m' in labels
+    assert 'CIKIS BEKLENIYOR' not in labels

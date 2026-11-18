@@ -460,23 +460,17 @@ class DualLineEvaluator:
         return pd.DataFrame(rows, columns=["Kosucu ID", "Zaman (s)", "Kamera", "Yon", "Sonuc", "Mekik No"])
 
     def export_results(self, output_dir: str | Path):
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        """Ham (teknik) tablolari output_dir/teknik altina yazar.
 
-        summary_df = self.get_results_dataframe()
-        summary_df.to_csv(output_dir / "sonuc_ozet.csv",
-                          index=False, encoding="utf-8-sig")
-
-        log_df = self.get_detailed_log_dataframe()
-        log_df.to_csv(output_dir / "sonuc_detay.csv",
-                      index=False, encoding="utf-8-sig")
-
-        excel_path = output_dir / "sonuc_rapor.xlsx"
-        with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
-            summary_df.to_excel(writer, sheet_name="Ozet", index=False)
-            log_df.to_excel(writer, sheet_name="Detay", index=False)
-
-        print(f"[DualEval] Raporlar kaydedildi: {output_dir}")
+        Okunur raporlar result_report.write_readable_outputs ile uretilir.
+        """
+        tech_dir = Path(output_dir) / "teknik"
+        tech_dir.mkdir(parents=True, exist_ok=True)
+        self.get_results_dataframe().to_csv(tech_dir / "ham_ozet.csv",
+                                            index=False, encoding="utf-8-sig")
+        self.get_detailed_log_dataframe().to_csv(tech_dir / "ham_gecisler.csv",
+                                                 index=False, encoding="utf-8-sig")
+        print(f"[DualEval] Ham kayitlar: {tech_dir}")
 
     # ------------------------------------------------------------------
     # Dahili Yardımcılar
